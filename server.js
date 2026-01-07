@@ -58,7 +58,11 @@ const studentsCache = { mtimeMs: 0, rows: [] };
 function normalizeKeyMap(row) {
   const out = {};
   Object.entries(row || {}).forEach(([k, v]) => {
-    const nk = String(k || "").trim().toLowerCase();
+    const nk = String(k || "")
+      .replace(/,/g, " ")
+      .trim()
+      .replace(/\s+/g, " ")
+      .toLowerCase();
     out[nk] = v;
   });
   return out;
@@ -501,7 +505,9 @@ app.post("/api/pdf", async (req, res) => {
     const c2 = b.secondary_color || "#00a3a3";
     const margin = 42;
     const pageWidth = doc.page.width - margin * 2;
-    const headerHeight = 78;
+    const headerHeight = 70;
+    const maxPages = pdfMode === "client" ? 1 : 2;
+    let pageCount = 1;
 
     const fitText = (text, maxWidth) => {
       const raw = String(text ?? "-");
@@ -511,146 +517,157 @@ app.post("/api/pdf", async (req, res) => {
       return s ? `${s}...` : "";
     };
 
+    const drawValue = (text, x, yPos, width, baseSize = 9, minSize = 7) => {
+      const raw = String(text ?? "-");
+      let size = baseSize;
+      doc.fontSize(size);
+      while (size > minSize && doc.widthOfString(raw) > width) {
+        size -= 0.5;
+        doc.fontSize(size);
+      }
+      doc.text(raw, x, yPos, { width, lineBreak: false });
+      doc.fontSize(baseSize);
+    };
+
     const drawHeader = () => {
       doc.rect(0, 0, doc.page.width, headerHeight).fill(c1);
-      doc.rect(0, headerHeight - 16, doc.page.width, 16).fill(c2);
+      doc.rect(0, headerHeight - 14, doc.page.width, 14).fill(c2);
 
-      doc.roundedRect(margin, 14, 140, 40, 6).fill("#ffffff");
+      doc.roundedRect(margin, 12, 140, 38, 6).fill("#ffffff");
       try {
         const logoRel = (b.logo_pdf || "public/assets/kc_logo.png").replace(/^\/+/, "");
         const logoPath = path.join(__dirname, logoRel);
-        doc.image(logoPath, margin + 10, 20, { height: 28 });
+        doc.image(logoPath, margin + 10, 18, { height: 26 });
       } catch (_) {
         // ignore logo errors
       }
 
-      doc.fillColor("#ffffff").fontSize(16).text(b.product_name || "UK Visa Calculation Report", margin, 18, { width: pageWidth, align: "center" });
-      doc.fontSize(9).text(b.company_name || "", margin, 38, { width: pageWidth, align: "center" });
-      doc.fontSize(8).fillColor("#073344").text(`Generated: ${new Date().toLocaleString()} - Mode: ${pdfMode === "client" ? "Client" : "Internal"}`, margin, headerHeight - 13, { width: pageWidth, align: "right" });
+      doc.fillColor("#ffffff").fontSize(15).text(b.product_name || "UK Visa Calculation Report", margin, 16, { width: pageWidth, align: "center" });
+      doc.fontSize(9).text(b.company_name || "", margin, 34, { width: pageWidth, align: "center" });
+      doc.fontSize(8).fillColor("#073344").text(`Generated: ${new Date().toLocaleString()} - Mode: ${pdfMode === "client" ? "Client" : "Internal"}`, margin, headerHeight - 12, { width: pageWidth, align: "right" });
 
-      // Status stamp
       const stampText = ok ? "ELIGIBLE" : "NOT ELIGIBLE";
       doc.save();
       doc.rotate(-18, { origin: [470, 120] });
-      doc.fontSize(28).fillColor(ok ? "#16a34a" : "#dc2626").opacity(0.2)
-        .text(stampText, 355, 95, { width: 220, align: "center" });
+      doc.fontSize(26).fillColor(ok ? "#16a34a" : "#dc2626").opacity(0.18)
+        .text(stampText, 360, 95, { width: 200, align: "center" });
       doc.opacity(1).restore();
 
-      return headerHeight + 18;
+      return headerHeight + 14;
     };
 
     let y = drawHeader();
+    const footerSpace = 28;
+    const bottomLimit = () => doc.page.height - margin - footerSpace;
 
     const ensureSpace = (height) => {
-      if (y + height <= doc.page.height - margin - 10) return;
-      doc.addPage();
-      y = drawHeader();
+      if (y + height <= bottomLimit()) return true;
+      if (pageCount < maxPages) {
+        doc.addPage();
+        pageCount += 1;
+        y = drawHeader();
+        return true;
+      }
+      return false;
     };
 
     const drawSummary = () => {
-      const boxH = 56;
-      ensureSpace(boxH + 10);
+      const boxH = 44;
+      if (!ensureSpace(boxH + 6)) return;
       doc.roundedRect(margin, y, pageWidth, boxH, 10).fill(ok ? "#dcfce7" : "#fee2e2");
-      doc.fillColor(ok ? "#065f46" : "#7f1d1d").fontSize(12)
-        .text(ok ? "Result: ELIGIBLE (Funds are sufficient)" : "Result: NOT ELIGIBLE (Funds are short)", margin + 12, y + 10, { width: pageWidth - 24 });
+      doc.fillColor(ok ? "#065f46" : "#7f1d1d").fontSize(11)
+        .text(ok ? "Result: ELIGIBLE (Funds are sufficient)" : "Result: NOT ELIGIBLE (Funds are short)", margin + 10, y + 8, { width: pageWidth - 20 });
       doc.fillColor("#0f172a").fontSize(9)
-        .text(`Required: ${fmtGBP(fundsReq.fundsRequiredGbp)} (${fmtQuote(fundsReq.fundsRequiredGbp)})`, margin + 12, y + 30, { width: pageWidth - 24 });
+        .text(`Required: ${fmtGBP(fundsReq.fundsRequiredGbp)} (${fmtQuote(fundsReq.fundsRequiredGbp)})`, margin + 10, y + 24, { width: pageWidth - 20 });
       doc.fillColor("#0f172a").fontSize(9)
-        .text(`Eligible available: ${fmtGBP(fundsAvail.summary.totalEligibleGbp)} (${fmtQuote(fundsAvail.summary.totalEligibleGbp)})`, margin + 12, y + 42, { width: pageWidth - 24 });
-      y += boxH + 12;
+        .text(`Eligible available: ${fmtGBP(fundsAvail.summary.totalEligibleGbp)} (${fmtQuote(fundsAvail.summary.totalEligibleGbp)})`, margin + 10, y + 34, { width: pageWidth - 20 });
+      y += boxH + 8;
       doc.fillColor("#000000");
     };
 
-    const drawSection = (title, rows, columns = 2) => {
-      const gap = 14;
-      const padding = 10;
-      const titleHeight = 14;
-      const rowHeight = 14;
+    const drawBox = (x, boxY, w, h, title, rows, columns = 1) => {
+      doc.roundedRect(x, boxY, w, h, 8).fill("#f8fafc");
+      doc.strokeColor("#e2e8f0").lineWidth(1).roundedRect(x, boxY, w, h, 8).stroke();
+      doc.fillColor("#0f172a").fontSize(10).text(title, x + 8, boxY + 6);
+
+      const paddingTop = 20;
+      const rowHeight = 12;
+      const colGap = 12;
       const cols = Math.max(1, columns);
-      const colWidth = (pageWidth - gap * (cols - 1) - padding * 2) / cols;
-      const rowCount = Math.ceil(rows.length / cols);
-      const boxHeight = padding + titleHeight + rowCount * rowHeight + padding;
-      ensureSpace(boxHeight + 6);
-
-      doc.roundedRect(margin, y, pageWidth, boxHeight, 8).fill("#f8fafc");
-      doc.strokeColor("#e2e8f0").lineWidth(1).roundedRect(margin, y, pageWidth, boxHeight, 8).stroke();
-      doc.fillColor("#0f172a").fontSize(11).text(title, margin + padding, y + padding - 2);
-
-      let startY = y + padding + titleHeight;
+      const colWidth = (w - 16 - colGap * (cols - 1)) / cols;
+      const labelSize = 7;
+      const valueSize = 9;
       rows.forEach((row, i) => {
         const col = i % cols;
         const rowIdx = Math.floor(i / cols);
-        const x = margin + padding + col * (colWidth + gap);
-        const rowY = startY + rowIdx * rowHeight;
-        const label = row.label || "";
-        const value = row.value ?? "-";
-        doc.fontSize(8).fillColor("#64748b").text(`${label}: `, x, rowY, { continued: true });
-        doc.fontSize(9).fillColor("#0f172a").text(fitText(value, colWidth - 8), x, rowY, { lineBreak: false });
+        const rx = x + 8 + col * (colWidth + colGap);
+        const ry = boxY + paddingTop + rowIdx * rowHeight;
+        doc.fontSize(labelSize).fillColor("#64748b").text(`${row.label}: `, rx, ry, { continued: true });
+        doc.fontSize(valueSize).fillColor("#0f172a");
+        drawValue(fitText(row.value ?? "-", colWidth - 8), rx, ry, colWidth - 8, valueSize, 7);
       });
-
-      y += boxHeight + 10;
     };
 
-    const drawTotalsBar = (label, value) => {
-      const barH = 28;
-      ensureSpace(barH + 10);
-      doc.roundedRect(margin, y, pageWidth, barH, 8).fill("#0f172a");
-      doc.fillColor("#ffffff").fontSize(11).text(`${label}: ${value}`, margin + 12, y + 8, { width: pageWidth - 24 });
-      y += barH + 10;
+    const drawInlineBox = (title, items) => {
+      const boxH = 28;
+      if (!ensureSpace(boxH + 6)) return;
+      doc.roundedRect(margin, y, pageWidth, boxH, 8).fill("#f8fafc");
+      doc.strokeColor("#e2e8f0").lineWidth(1).roundedRect(margin, y, pageWidth, boxH, 8).stroke();
+      doc.fillColor("#0f172a").fontSize(9).text(title, margin + 8, y + 6);
+      const colGap = 12;
+      const startX = margin + 90;
+      const colWidth = (pageWidth - 98 - colGap * (items.length - 1)) / items.length;
+      items.forEach((item, idx) => {
+        const x = startX + idx * (colWidth + colGap);
+        doc.fontSize(7).fillColor("#64748b").text(`${item.label}:`, x, y + 6);
+        doc.fontSize(8).fillColor("#0f172a");
+        drawValue(fitText(item.value ?? "-", colWidth), x, y + 16, colWidth, 8, 7);
+      });
+      y += boxH + 8;
       doc.fillColor("#000000");
     };
 
     const drawFundsTable = (rows) => {
-      const headerH = 18;
-      const rowH = 12;
-      const maxRows = 15;
+      const headerH = 16;
+      const rowH = 10;
+      const maxRows = 10;
       const cols = [
         { title: "OK", width: 24 },
         { title: "Account", width: 70 },
-        { title: "Currency", width: 60 },
-        { title: "Amount", width: 70 },
-        { title: "GBP", width: 70 },
-        { title: "Issues", width: pageWidth - (24 + 70 + 60 + 70 + 70) - 10 },
+        { title: "Currency", width: 50 },
+        { title: "Amount", width: 60 },
+        { title: "GBP", width: 60 },
+        { title: "Issues", width: pageWidth - (24 + 70 + 50 + 60 + 60) - 10 },
       ];
 
-      const drawHeaderRow = () => {
-        ensureSpace(headerH + rowH);
-        doc.roundedRect(margin, y, pageWidth, headerH, 6).fill("#f1f5f9");
-        doc.fillColor("#334155").fontSize(8);
-        let x = margin + 6;
-        cols.forEach((c) => {
-          doc.text(c.title, x, y + 5, { width: c.width });
-          x += c.width;
-        });
-        y += headerH + 4;
-      };
+      if (!ensureSpace(headerH + rowH + 4)) return;
+      doc.roundedRect(margin, y, pageWidth, headerH, 6).fill("#f1f5f9");
+      doc.fillColor("#334155").fontSize(7);
+      let x = margin + 6;
+      cols.forEach((c) => {
+        doc.text(c.title, x, y + 4, { width: c.width });
+        x += c.width;
+      });
+      y += headerH + 2;
 
-      drawHeaderRow();
-      doc.fontSize(8);
-      const limited = rows.slice(0, maxRows);
-      limited.forEach((r) => {
-        ensureSpace(rowH + 6);
-        let x = margin + 6;
+      doc.fontSize(7);
+      rows.slice(0, maxRows).forEach((r) => {
+        if (!ensureSpace(rowH + 2)) return;
+        let cx = margin + 6;
         const okTxt = r.eligible ? "OK" : "NO";
-        doc.fillColor(r.eligible ? "#065f46" : "#9a3412").text(okTxt, x, y, { width: cols[0].width });
-        x += cols[0].width;
-        doc.fillColor("#0f172a").text(fitText(r.accountType || "-", cols[1].width - 4), x, y, { width: cols[1].width });
-        x += cols[1].width;
-        doc.text(fitText(r.currency || "-", cols[2].width - 4), x, y, { width: cols[2].width });
-        x += cols[2].width;
-        doc.text(fitText(String(r.amount || 0), cols[3].width - 4), x, y, { width: cols[3].width });
-        x += cols[3].width;
-        doc.text(fitText(`GBP ${String(r.amountGbp || 0)}`, cols[4].width - 4), x, y, { width: cols[4].width });
-        x += cols[4].width;
-        doc.fillColor("#475569").text(fitText((r.issues || []).join("; "), cols[5].width - 4), x, y, { width: cols[5].width });
+        doc.fillColor(r.eligible ? "#065f46" : "#9a3412").text(okTxt, cx, y, { width: cols[0].width });
+        cx += cols[0].width;
+        doc.fillColor("#0f172a").text(fitText(r.accountType || "-", cols[1].width - 4), cx, y, { width: cols[1].width });
+        cx += cols[1].width;
+        doc.text(fitText(r.currency || "-", cols[2].width - 4), cx, y, { width: cols[2].width });
+        cx += cols[2].width;
+        doc.text(fitText(String(r.amount || 0), cols[3].width - 4), cx, y, { width: cols[3].width });
+        cx += cols[3].width;
+        doc.text(fitText(`GBP ${String(r.amountGbp || 0)}`, cols[4].width - 4), cx, y, { width: cols[4].width });
+        cx += cols[4].width;
+        doc.fillColor("#475569").text(fitText((r.issues || []).join("; "), cols[5].width - 4), cx, y, { width: cols[5].width });
         y += rowH;
       });
-
-      if (rows.length > maxRows) {
-        ensureSpace(12);
-        doc.fillColor("#475569").fontSize(8).text(`(Showing first ${maxRows} rows of ${rows.length})`, margin, y);
-        y += 12;
-      }
     };
 
     drawSummary();
@@ -658,86 +675,78 @@ app.post("/api/pdf", async (req, res) => {
     const studentCityCountry = [payload.studentCity, payload.studentCountry].filter(Boolean).join(", ");
     const courseDates = `${payload.courseStart || "-"} to ${payload.courseEnd || "-"}`;
 
-    const courseRows = [
-      { label: "University", value: payload.universityName || "-" },
-      { label: "Study location", value: normalizeRegion(payload.region || "outside_london") === "london" ? "London" : "Outside London" },
-      { label: "Course dates (CAS)", value: courseDates },
-      { label: "Visa application date", value: payload.applicationDate || "-" },
-      { label: "Display currency", value: quote },
-      { label: "Dependants", value: fundsReq.dependantsCountEffective },
-    ].filter(Boolean);
-    drawSection("Course details", courseRows, 2);
+    const colGap = 12;
+    const halfWidth = (pageWidth - colGap) / 2;
+    const rowTop = y;
+    const boxH1 = 86;
+    if (ensureSpace(boxH1)) {
+      drawBox(margin, rowTop, halfWidth, boxH1, "Course details", [
+        { label: "University", value: payload.universityName || "-" },
+        { label: "Study location", value: normalizeRegion(payload.region || "outside_london") === "london" ? "London" : "Outside London" },
+        { label: "Course dates", value: courseDates },
+        { label: "Visa application", value: payload.applicationDate || "-" },
+        { label: "Display currency", value: quote },
+        { label: "Dependants", value: fundsReq.dependantsCountEffective },
+      ], 1);
+      drawBox(margin + halfWidth + colGap, rowTop, halfWidth, boxH1, "Student details", [
+        { label: "Acknowledgement No", value: payload.studentAckNumber || "-" },
+        { label: "Student name", value: payload.studentName || "-" },
+        { label: "Program", value: payload.studentProgram || "-" },
+        { label: "Status", value: payload.studentStatus || "-" },
+        { label: "Intake - InYear", value: payload.studentIntakeYear || "-" },
+        { label: "City / Country", value: studentCityCountry || "-" },
+      ], 1);
+      y = rowTop + boxH1 + 8;
+    }
 
-    const studentRows = [
-      { label: "Acknowledgement No", value: payload.studentAckNumber || "-" },
-      { label: "Student name", value: payload.studentName || "-" },
-      { label: "Program", value: payload.studentProgram || "-" },
-      { label: "Status", value: payload.studentStatus || "-" },
-      { label: "Intake - InYear", value: payload.studentIntakeYear || "-" },
-      { label: "City / Country", value: studentCityCountry || "-" },
-    ];
-    drawSection("Student details", studentRows, 2);
-
-    const counselorRows = [
-      { label: "Counselor", value: payload.counselorName || "-" },
+    drawInlineBox("Counselor details", [
+      { label: "Name", value: payload.counselorName || "-" },
       { label: "Email", value: payload.counselorEmail || "-" },
-      { label: "Region", value: payload.counselorRegion || "-" },
-      { label: "Sub region", value: payload.counselorSubRegion || "-" },
-      { label: "Designation", value: payload.counselorDesignation || "-" },
-      { label: "Roles", value: payload.counselorRoles || "-" },
-    ];
-    drawSection("Counselor details", counselorRows, 2);
+      { label: "Region/Sub", value: [payload.counselorRegion, payload.counselorSubRegion].filter(Boolean).join(" / ") || "-" },
+      { label: "Role", value: [payload.counselorDesignation, payload.counselorRoles].filter(Boolean).join(" / ") || "-" },
+    ]);
 
-    const feesRows = [
-      { label: "Tuition total", value: `${fmtGBP(safeNum(payload.tuitionFeeTotalGbp))} (${fmtQuote(safeNum(payload.tuitionFeeTotalGbp))})` },
-      { label: "Tuition paid", value: `${fmtGBP(safeNum(payload.tuitionFeePaidGbp))} (${fmtQuote(safeNum(payload.tuitionFeePaidGbp))})` },
-      { label: "Scholarship / waiver", value: `${fmtGBP(safeNum(payload.scholarshipGbp))} (${fmtQuote(safeNum(payload.scholarshipGbp))})` },
-      { label: "Buffer (optional)", value: `${fmtGBP(safeNum(payload.bufferGbp))} (${fmtQuote(safeNum(payload.bufferGbp))})` },
-      { label: "IHS per person", value: `${fmtGBP(ihs.ihsPerPersonGbp)} (${fmtQuote(ihs.ihsPerPersonGbp)})` },
-      { label: "Persons counted", value: ihs.persons },
-      { label: "IHS total", value: `${fmtGBP(ihs.ihsTotalGbp)} (${fmtQuote(ihs.ihsTotalGbp)})` },
-    ];
-    drawSection("Fees and IHS", feesRows, 2);
+    const boxH2 = 88;
+    const rowTop2 = y;
+    if (ensureSpace(boxH2)) {
+      drawBox(margin, rowTop2, halfWidth, boxH2, "Fees and IHS", [
+        { label: "Tuition total", value: `${fmtGBP(safeNum(payload.tuitionFeeTotalGbp))} (${fmtQuote(safeNum(payload.tuitionFeeTotalGbp))})` },
+        { label: "Tuition paid", value: `${fmtGBP(safeNum(payload.tuitionFeePaidGbp))} (${fmtQuote(safeNum(payload.tuitionFeePaidGbp))})` },
+        { label: "Scholarship", value: `${fmtGBP(safeNum(payload.scholarshipGbp))} (${fmtQuote(safeNum(payload.scholarshipGbp))})` },
+        { label: "Buffer", value: `${fmtGBP(safeNum(payload.bufferGbp))} (${fmtQuote(safeNum(payload.bufferGbp))})` },
+        { label: "IHS per person", value: `${fmtGBP(ihs.ihsPerPersonGbp)} (${fmtQuote(ihs.ihsPerPersonGbp)})` },
+        { label: "IHS total", value: `${fmtGBP(ihs.ihsTotalGbp)} (${fmtQuote(ihs.ihsTotalGbp)})` },
+      ], 1);
+      drawBox(margin + halfWidth + colGap, rowTop2, halfWidth, boxH2, "Funds required (28-day)", [
+        { label: "Tuition due", value: `${fmtGBP(fundsReq.tuitionDueGbp)} (${fmtQuote(fundsReq.tuitionDueGbp)})` },
+        { label: "Maintenance (student)", value: `${fmtGBP(fundsReq.maintenanceStudentGbp)} (${fmtQuote(fundsReq.maintenanceStudentGbp)})` },
+        { label: "Maintenance (dependants)", value: `${fmtGBP(fundsReq.maintenanceDependantsGbp)} (${fmtQuote(fundsReq.maintenanceDependantsGbp)})` },
+        { label: "Buffer", value: `${fmtGBP(fundsReq.bufferGbp)} (${fmtQuote(fundsReq.bufferGbp)})` },
+      ], 1);
+      y = rowTop2 + boxH2 + 8;
+    }
 
-    const requiredRows = [
-      { label: "Tuition due", value: `${fmtGBP(fundsReq.tuitionDueGbp)} (${fmtQuote(fundsReq.tuitionDueGbp)})` },
-      { label: "Maintenance (student)", value: `${fmtGBP(fundsReq.maintenanceStudentGbp)} (${fmtQuote(fundsReq.maintenanceStudentGbp)})` },
-      { label: "Maintenance (dependants)", value: `${fmtGBP(fundsReq.maintenanceDependantsGbp)} (${fmtQuote(fundsReq.maintenanceDependantsGbp)})` },
-      { label: "Buffer", value: `${fmtGBP(fundsReq.bufferGbp)} (${fmtQuote(fundsReq.bufferGbp)})` },
-    ];
-    drawSection("Funds required (28-day)", requiredRows, 2);
-    drawTotalsBar("TOTAL REQUIRED", `${fmtGBP(fundsReq.fundsRequiredGbp)} (${fmtQuote(fundsReq.fundsRequiredGbp)})`);
-
-    const availableRows = [
-      { label: "Total available (all rows)", value: `${fmtGBP(fundsAvail.summary.totalAllGbp)} (${fmtQuote(fundsAvail.summary.totalAllGbp)})` },
-      { label: "Total eligible (meets checks)", value: `${fmtGBP(fundsAvail.summary.totalEligibleGbp)} (${fmtQuote(fundsAvail.summary.totalEligibleGbp)})` },
-    ];
-    drawSection("Funds available", availableRows, 2);
+    drawInlineBox("Totals", [
+      { label: "Total required", value: `${fmtGBP(fundsReq.fundsRequiredGbp)} (${fmtQuote(fundsReq.fundsRequiredGbp)})` },
+      { label: "Eligible funds", value: `${fmtGBP(fundsAvail.summary.totalEligibleGbp)} (${fmtQuote(fundsAvail.summary.totalEligibleGbp)})` },
+      { label: "Gap (Eligible-Required)", value: fmtGBP(gapEligible) + (quote === "GBP" ? "" : ` | ${fmtQuote(gapEligible)}`) },
+    ]);
 
     if (pdfMode === "internal") {
-      drawSection("Funds available breakdown (first rows)", [{ label: "Rows shown", value: "See table below" }], 1);
       drawFundsTable(fundsAvail.rows);
       y += 6;
     }
-
-    const gapRows = [
-      { label: "Gap (Eligible - Required)", value: fmtGBP(gapEligible) + (quote === "GBP" ? "" : ` | ${fmtQuote(gapEligible)}`) },
-      { label: "Gap (All rows - Required)", value: fmtGBP(gapAll) + (quote === "GBP" ? "" : ` | ${fmtQuote(gapAll)}`) },
-    ];
-    drawSection("Gap summary", gapRows, 1);
 
     const ruleText =
       `Rules reminder: Funds must be held for ${config.rules.funds_hold_days} consecutive days. ` +
       `Statement end date must be within ${config.rules.statement_age_days} days of the visa application date. ` +
       `Visa application date is required for the statement freshness check.`;
-    const footerSpace = 24;
-    const rulesHeight = 28;
-    const bottomLimit = doc.page.height - margin - footerSpace;
-    if (y + rulesHeight > bottomLimit) {
-      y = bottomLimit - rulesHeight;
+    const rulesHeight = 22;
+    if (y + rulesHeight > bottomLimit()) {
+      y = bottomLimit() - rulesHeight;
     }
-    doc.fillColor("#475569").fontSize(8).text(ruleText, margin, y, { width: pageWidth });
-    y += 12;
+    doc.fillColor("#475569").fontSize(7).text(ruleText, margin, y, { width: pageWidth });
+    y += 10;
 
     if (b.footer_note) {
       doc.fillColor("#64748b").fontSize(7).text(String(b.footer_note), margin, doc.page.height - 30, { width: pageWidth, align: "center" });
