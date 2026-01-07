@@ -55,6 +55,15 @@ function normalizeStr(val) {
 }
 
 const studentsCache = { mtimeMs: 0, rows: [] };
+function normalizeKeyMap(row) {
+  const out = {};
+  Object.entries(row || {}).forEach(([k, v]) => {
+    const nk = String(k || "").trim().toLowerCase();
+    out[nk] = v;
+  });
+  return out;
+}
+
 function loadStudents() {
   if (!fs.existsSync(STUDENTS_XLSX_PATH)) return [];
   const stat = fs.statSync(STUDENTS_XLSX_PATH);
@@ -65,22 +74,25 @@ function loadStudents() {
   const sheet = wb.Sheets[sheetName];
   const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
 
-  const mapped = rows.map((r) => ({
-    ackNumber: normalizeStr(r.AcknowledgementNumber || r.AcknowledgmentNumber),
-    studentName: normalizeStr(r.StudentName),
-    programName: normalizeStr(r.ProgramName),
-    university: normalizeStr(r.University),
-    status: normalizeStr(r.STATUS),
-    intakeYear: normalizeStr(r["Intake InYear"] || r["Intake - InYear"] || r.IntakeInYear),
-    applicationStageChangedOn: normalizeStr(r.ApplicationStageChangedOn),
-    assignee: normalizeStr(r.Assignee),
-    assigneeEmail: normalizeStr(r.AssigneeEmail),
-    dob: normalizeStr(r.DOB),
-    gender: normalizeStr(r.Gender),
-    maritalStatus: normalizeStr(r.MaritalStatus),
-    city: normalizeStr(r.City),
-    country: normalizeStr(r.Country),
-  })).filter((r) => r.ackNumber || r.studentName);
+  const mapped = rows.map((r) => {
+    const n = normalizeKeyMap(r);
+    return {
+      ackNumber: normalizeStr(n.acknowledgementnumber || n.acknowledgmentnumber),
+      studentName: normalizeStr(n.studentname),
+      programName: normalizeStr(n.programname),
+      university: normalizeStr(n.university),
+      status: normalizeStr(n.status),
+      intakeYear: normalizeStr(n["intake inyear"] || n["intake - inyear"] || n.intakeinyear),
+      applicationStageChangedOn: normalizeStr(n.applicationstagechangedon),
+      assignee: normalizeStr(n.assignee),
+      assigneeEmail: normalizeStr(n.assigneeemail),
+      dob: normalizeStr(n.dob),
+      gender: normalizeStr(n.gender),
+      maritalStatus: normalizeStr(n.maritalstatus),
+      city: normalizeStr(n.city),
+      country: normalizeStr(n.country),
+    };
+  }).filter((r) => r.ackNumber || r.studentName);
 
   studentsCache.mtimeMs = stat.mtimeMs;
   studentsCache.rows = mapped;
@@ -147,10 +159,10 @@ async function getFx(from, toCsv, manualFx) {
   } catch (e) {
     // Manual FX fallback (INR-GBP only)
     const enabled = Boolean(manualFx && manualFx.enabled);
-    const inrPerGbp = Number(manualFx && manualFx.inrPerGbp || 0);
+    const inrPerGbp = Number((manualFx && manualFx.inrPerGbp) || 0);
     if (enabled && inrPerGbp > 0) {
       const f = String(from).toUpperCase();
-      const t = String(to).toUpperCase();
+      const t = String(toCsv).toUpperCase();
       if (f === "INR" && t === "GBP") {
         return { rates: { GBP: 1 / inrPerGbp }, base: "INR", date: null, fetchedAt: new Date().toISOString(), fxSource: "manual" };
       }
