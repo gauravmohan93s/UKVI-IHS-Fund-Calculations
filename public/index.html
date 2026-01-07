@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>UK Visa Calculator - IHS + Funds Required + Funds Available</title>
+  <link rel="stylesheet" href="/styles.css"/>
+</head>
+<body>
+<header class="topbar">
+  <div class="wrap topbar-inner">
+    <div class="brand">
+      <img class="logoimg" id="brandLogoImg" src="/assets/kc-logo.svg" alt="Company logo"/><div class="logo fallback" id="brandLogo" aria-hidden="true">KC</div>
+      <div class="brand-text">
+        <div class="brand-name" id="brandName">KC Overseas Education</div>
+        <div class="brand-sub" id="brandProduct">UK Visa Funds &amp; IHS Calculator</div>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <span class="pill">Student Visa</span>
+    </div>
+  </div>
+</header>
+
+<div class="modal-backdrop" id="accessModal" style="display:none">
+  <div class="modal">
+    <h3>Access Code</h3>
+    <p class="muted small">Enter the internal access code to use this tool.</p>
+    <label>Access code
+      <input id="accessCodeInput" type="password" placeholder="Enter access code"/>
+    </label>
+    <div class="nav" style="justify-content:flex-end">
+      <button class="primary" id="accessCodeSave">Continue</button>
+    </div>
+    <p class="muted small" id="accessCodeError" style="display:none;color:#b91c1c;margin-top:10px"></p>
+  </div>
+</div>
+
+<main class="wrap">
+  <div class="notice warn" id="formErrors" style="display:none"></div>
+  <div class="tabs">
+    <button class="tab active" data-tab="t1">1) Course details</button>
+    <button class="tab" data-tab="t2">2) Fees & dependants</button>
+    <button class="tab" data-tab="t3">3) Funds in bank statement</button>
+    <button class="tab" data-tab="t4">4) Results & PDF</button>
+  </div>
+
+  <section class="card tabpane active" id="t1">
+    <h2>Course details (Inputs)</h2>
+    <p class="muted small">
+      Enter only the fields below. Study location is mapped automatically from the selected university.
+    </p>
+
+    <div class="form-grid">
+
+      <label>Student acknowledgement number (search)
+        <input id="studentAck" type="text" placeholder="Start typing acknowledgement number..." autocomplete="off"/>
+        <div class="helper">Select from suggestions to auto-fill student and counselor details.</div>
+        <div class="suggest" id="studentSuggest" style="display:none"></div>
+      </label>
+
+      <label>University (type to search)
+        <input id="universityInput" type="text" placeholder="Start typing university name..." autocomplete="off"/>
+        <div class="helper">Pick from the top 5 suggestions to auto-set London / Outside London.</div>
+        <div class="suggest" id="uniSuggest" style="display:none"></div>
+      </label>
+
+      <select id="universitySelect" style="display:none">
+        <option value="">Select university</option>
+      </select>
+
+      <label>Student name (auto)
+        <input id="studentName" type="text" readonly/>
+      </label>
+
+      <label>Program name (auto)
+        <input id="studentProgram" type="text" readonly/>
+      </label>
+
+      <label>Student status (auto)
+        <input id="studentStatus" type="text" readonly/>
+      </label>
+
+      <label>Intake - InYear (auto)
+        <input id="studentIntakeYear" type="text" readonly/>
+      </label>
+
+      <label>City / Country (auto)
+        <input id="studentCityCountry" type="text" readonly/>
+      </label>
+
+      <label>Counselor (type to search)
+        <input id="counselorInput" type="text" placeholder="Start typing counselor name..." autocomplete="off"/>
+        <div class="suggest" id="counselorSuggest" style="display:none"></div>
+      </label>
+
+      <label>Counselor email (auto)
+        <input id="counselorEmail" type="text" readonly/>
+      </label>
+
+      <label>Counselor region / sub region (auto)
+        <input id="counselorRegion" type="text" readonly/>
+      </label>
+
+      <label>Counselor designation / roles (auto)
+        <input id="counselorDesignation" type="text" readonly/>
+      </label>
+
+      <label>Study location (auto from university)
+        <input id="regionDisplay" type="text" value="Outside London" readonly/>
+      </label>
+
+      <label>Course start date (as per CAS)
+        <input id="courseStart" type="date"/>
+      </label>
+
+      <label>Course end date (as per CAS)
+        <input id="courseEnd" type="date"/>
+      </label>
+
+      <label>Visa application date (mandatory)
+        <input id="applicationDate" type="date"/>
+        <div class="helper">Used to validate the 31-day statement freshness rule.</div>
+      </label>
+
+      <label>Display currency (for sharing with student/parents)
+        <select id="quote">
+          <option value="INR" selected>INR - Indian Rupee (INR)</option>
+          <option value="GBP">GBP - British Pound (GBP)</option>
+          <option value="USD">USD - US Dollar (USD)</option>
+          <option value="EUR">EUR - Euro (EUR)</option>
+          <option value="BDT">BDT - Bangladeshi Taka (BDT)</option>
+          <option value="PKR">PKR - Pakistani Rupee (PKR)</option>
+          <option value="LKR">LKR - Sri Lankan Rupee (LKR)</option>
+          <option value="NGN">NGN - Nigerian Naira (NGN)</option>
+          <option value="KES">KES - Kenyan Shilling (KES)</option>
+          <option value="GHS">GHS - Ghanaian Cedi (GHS)</option>
+          <option value="UGX">UGX - Ugandan Shilling (UGX)</option>
+          <option value="ZAR">ZAR - South African Rand (ZAR)</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="notice info">
+      <strong>Reminder:</strong> Maintenance funds must be held for <strong>28 consecutive days</strong>.
+      The bank statement end date should be within <strong>31 days</strong> of the visa application date.
+    </div>
+
+    <p class="hint" id="rateHint">Loading official rates...</p>
+<details class="fxpanel" id="fxPanel">
+  <summary>FX settings (only use if live FX fails)</summary>
+  <div class="notice warn" id="fxFallbackNote" style="display:none;margin-top:10px">
+    Live FX is temporarily unavailable. You can retry calculation or enable manual INR-GBP rate below.
+  </div>
+  <div class="fxrow">
+    <label class="toggle"><input type="checkbox" id="useManualFx"/><span>Use manual INR per 1 GBP</span></label>
+    <input id="manualInrPerGbp" type="number" step="0.01" placeholder="e.g., 105.50" style="max-width:220px"/>
+  </div>
+  <p class="muted small" style="margin:8px 0 0">Manual FX is applied only when enabled and live FX fetch fails. Supports INR-GBP only.</p>
+</details>
+    <div class="nav">
+      <button class="primary" data-next="t2">Next ></button>
+    </div>
+  </section>
+
+  <section class="card tabpane" id="t2">
+    <h2>Fees & dependants (Inputs)</h2>
+
+    <div class="form-grid">
+      <label>Tuition fee (Total) - GBP
+        <input id="tuitionTotal" type="number" min="0" step="0.01" placeholder="e.g., 18000"/>
+      </label>
+
+      <label>Tuition paid / deposit - GBP
+        <input id="tuitionPaid" type="number" min="0" step="0.01" placeholder="e.g., 4000"/>
+      </label>
+
+      <label>Scholarship / waiver - GBP
+        <input id="scholarship" type="number" min="0" step="0.01" placeholder="e.g., 2000"/>
+      </label>
+
+      <label>Number of dependants (if applicable)
+        <input id="dependants" type="number" min="0" step="1" value="0"/>
+      </label>
+
+      <label>Buffer amount - GBP (optional)
+        <input id="buffer" type="number" min="0" step="0.01" value="0"/>
+      </label>
+    </div>
+
+    <div class="nav">
+      <button class="secondary" data-prev="t1">Back</button>
+      <button class="primary" data-next="t3">Next ></button>
+    </div>
+  </section>
+
+  <section class="card tabpane" id="t3">
+    <h2>Funds in bank statement (Inputs)</h2>
+    <p class="muted small">Add each bank statement line (any currency). Amount is the closing balance. We convert to GBP using live FX.</p>
+
+    <div class="table-actions">
+      <button id="addRow" class="secondary">+ Add row</button>
+      <button id="clearRows" class="secondary">Clear</button>
+    </div>
+
+    <table class="table" id="fundsTable">
+      <thead>
+        <tr>
+          <th>Account type</th>
+          <th>Source/Notes</th>
+          <th>Currency (full name)</th>
+          <th>Closing balance amount</th>
+          <th>Statement start</th>
+          <th>Statement end</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+
+    <div class="nav">
+      <button class="secondary" data-prev="t2">Back</button>
+      <button class="primary" data-next="t4">Next ></button>
+    </div>
+  </section>
+
+  <section class="card tabpane" id="t4">
+    <h2>Results (Read-only)</h2>
+
+    <div class="buttons">
+      <button id="btnCalc" class="primary">Calculate</button>
+      <button id="btnPdf" class="secondary">Download PDF</button>
+      <button id="btnReset" class="secondary">Reset</button>
+    </div>
+
+    <div class="statusline"><div class="statusbadge neutral" id="eligibilityStatus">Status: -</div></div>
+
+    <div class="kpi-grid">
+      <div class="kpi">
+        <div class="kpi-label">IHS Total</div>
+        <div class="kpi-value" id="ihsGbp">-</div>
+        <div class="kpi-sub" id="ihsFx">-</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Funds Required (28-day)</div>
+        <div class="kpi-value" id="fundsReqGbp">-</div>
+        <div class="kpi-sub" id="fundsReqFx">-</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Funds Available (Eligible)</div>
+        <div class="kpi-value" id="fundsAvailGbp">-</div>
+        <div class="kpi-sub" id="fundsAvailFx">-</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Gap (Eligible - Required)</div>
+        <div class="kpi-value" id="gapGbp">-</div>
+        <div class="kpi-sub" id="gapFx">-</div>
+      </div>
+    </div>
+
+    <h3>Funds Required Breakdown (GBP)</h3>
+    <table class="table">
+      <thead><tr><th>Component</th><th>GBP</th></tr></thead>
+      <tbody>
+        <tr><td>Tuition due</td><td id="bTuition">-</td></tr>
+        <tr><td>Maintenance (student)</td><td id="bStudent">-</td></tr>
+        <tr><td>Maintenance (dependants)</td><td id="bDeps">-</td></tr>
+        <tr><td>Buffer</td><td id="bBuffer">-</td></tr>
+        <tr class="total"><td>Total required</td><td id="bTotal">-</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Funds Available Breakdown (GBP)</h3>
+    <table class="table" id="fundsAvailBreak">
+      <thead><tr><th>Status</th><th>Account</th><th>Source</th><th>Amount</th><th>Currency (full name)</th><th>FX to GBP</th><th>GBP</th><th>Issues</th></tr></thead>
+      <tbody></tbody>
+    </table>
+
+    <div class="note warn" id="validationNote"></div>
+
+    <div class="note" id="rulesNote"></div>
+    <div class="note muted" id="sourcesNote"></div>
+
+    <div class="nav">
+      <button class="secondary" data-prev="t3">Back</button>
+    </div>
+  </section>
+</main>
+
+<footer class="wrap muted small" id="brandFooter">
+  <p>Internal guidance tool. Always cross-check with latest GOV.UK requirements before filing.</p>
+</footer>
+
+<script src="/app.js"></script>
+</body>
+</html>

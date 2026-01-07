@@ -1,0 +1,1650 @@
+{
+  "sources": {
+    "student_money_url": "https://www.gov.uk/student-visa/money",
+    "dependants_money_url": "https://www.gov.uk/student-visa/family-members",
+    "child_student_money_url": "https://www.gov.uk/child-study-visa/money",
+    "ihs_url": "https://www.gov.uk/healthcare-immigration-application/how-much-pay"
+  },
+  "routes": {
+    "student": {
+      "label": "Student (Adult)",
+      "maintenance_monthly_gbp": {
+        "london": 1529,
+        "outside_london": 1171
+      },
+      "dependant_monthly_gbp": {
+        "london": 845,
+        "outside_london": 680
+      },
+      "max_months": 9,
+      "dependants_allowed": true
+    },
+    "child_16_17_independent": {
+      "label": "Child Student (16\u201317 living independently)",
+      "maintenance_monthly_gbp": {
+        "london": 1334,
+        "outside_london": 1023
+      },
+      "max_months": 9,
+      "dependants_allowed": false
+    }
+  },
+  "rules": {
+    "funds_hold_days": 28,
+    "statement_age_days": 31
+  },
+  "ihs": {
+    "student_yearly_gbp": 776,
+    "half_year_gbp": 388,
+    "other_yearly_gbp": 1035
+  },
+  "fx": {
+    "provider": "frankfurter.app",
+    "default_quote": "INR"
+  },
+  "universities": [
+    {
+      "id": 1579,
+      "name": "(ECA) London Metropolitan University",
+      "region": "london"
+    },
+    {
+      "id": 990,
+      "name": "(HOLMES EDUCATION GROUP) St Mary\u2019s University London International College",
+      "region": "london"
+    },
+    {
+      "id": 993,
+      "name": "(HOLMES EDUCATION GROUP) University for the Creative Arts International College",
+      "region": "outside_london"
+    },
+    {
+      "id": 991,
+      "name": "(HOLMES EDUCATION GROUP) University of Bedfordshire International College",
+      "region": "outside_london"
+    },
+    {
+      "id": 1117,
+      "name": "(HOLMES EDUCATION GROUP) University of Chichester",
+      "region": "outside_london"
+    },
+    {
+      "id": 1096,
+      "name": "(HOLMES EDUCATION GROUP) University of Chichester International College",
+      "region": "outside_london"
+    },
+    {
+      "id": 1116,
+      "name": "(HOLMES EDUCATION GROUP) University of Worcester",
+      "region": "outside_london"
+    },
+    {
+      "id": 992,
+      "name": "(HOLMES EDUCATION GROUP) University of Worcester International College",
+      "region": "outside_london"
+    },
+    {
+      "id": 316,
+      "name": "(INTO) City University of London",
+      "region": "london"
+    },
+    {
+      "id": 979,
+      "name": "(INTO) Glasgow Caledonian University",
+      "region": "outside_london"
+    },
+    {
+      "id": 1468,
+      "name": "(INTO) Lancaster University",
+      "region": "outside_london"
+    },
+    {
+      "id": 889,
+      "name": "(INTO) London World Education Centre",
+      "region": "london"
+    },
+    {
+      "id": 1461,
+      "name": "(INTO) Manchester",
+      "region": "outside_london"
+    },
+    {
+      "id": 330,
+      "name": "(INTO) Manchester Metropolitan University",
+      "region": "outside_london"
+    },
+    {
+      "id": 980,
+      "name": "(INTO) Newcastle University",
+      "region": "outside_london"
+    },
+    {
+      "id": 885,
+      "name": "(INTO) Queen's University Belfast",
+      "region": "outside_london"
+    },
+    {
+      "id": 371,
+      "name": "(INTO) University of East of Anglia",
+      "region": "outside_london"
+    },
+    {
+      "id": 886,
+      "name": "(INTO) University of Exeter",
+      "region": "outside_london"
+    },
+    {
+      "id": 370,
+      "name": "(INTO) University of Manchester",
+      "region": "outside_london"
+    },
+    {
+      "id": 887,
+      "name": "(INTO) University of Stirling",
+      "region": "outside_london"
+    },
+    {
+      "id": 1542,
+      "name": "(KAPLAN Open Learning) University of Essex",
+      "region": "outside_london"
+    },
+    {
+      "id": 1608,
+      "name": "(KAPLAN Open Learning) University of Liverpool",
+      "region": "outside_london"
+    },
+    {
+      "id": 386,
+      "name": "(KAPLAN) Bournemouth University",
+      "region": "outside_london"
+    },
+    {
+      "id": 983,
+      "name": "(KAPLAN) International College London",
+      "region": "london"
+    },
+    {
+      "id": 384,
+      "name": "(KAPLAN) Nottingham Trent International College",
+      "region": "outside_london"
+    },
+    {
+      "id": 913,
+      "name": "(KAPLAN) Queen Mary University of London",
+      "region": "london"
+    },
+    {
+      "id": 382,
+      "name": "(Kaplan) University of Aberdeen, Aberdeen, Scotland",
+      "region": "outside_london"
+    },
+    {
+      "id": 1463,
+      "name": "(KAPLAN) University of Birmingham",
+      "region": "outside_london"
+    },
+    {
+      "id": 383,
+      "name": "(KAPLAN) University of Brighton",
+      "region": "outside_london"
+    },
+    {
+      "id": 1010,
+      "name": "(KAPLAN) University of Bristol",
+      "region": "outside_london"
+    },
+    {
+      "id": 984,
+      "name": "(KAPLAN) University of Essex International College",
+      "region": "outside_london"
+    },
+    {
+      "id": 985,
+      "name": "(KAPLAN) University of Glasgow International College",
+      "region": "outside_london"
+    },
+    {
+      "id": 986,
+      "name": "(KAPLAN) University of Liverpool International College",
+      "region": "outside_london"
+    },
+    {
+      "id": 949,
+      "name": "(KAPLAN) University of Nottingham International College",
+      "region": "outside_london"
+    },
+    {
+      "id": 381,
+      "name": "(KAPLAN) University of York",
+      "region": "outside_london"
+    },
+    {
+      "id": 385,
+      "name": "(KAPLAN) UWE Bristol",
+      "region": "outside_london"
+    },
+    {
+      "id": 1728,
+      "name": "(MALVERN INTERNATIONAL) University of Cumbria",
+      "region": "outside_london"
+    },
+    {
+      "id": 1727,
+      "name": "(MALVERN INTERNATIONAL) University of Wolverhampton",
+      "region": "outside_london"
+    },
+    {
+      "id": 852,
+      "name": "(NAVITAS) Anglia Ruskin University College",
+      "region": "outside_london"
+    },
+    {
+      "id": 851,
+      "name": "(NAVITAS) Birmingham City University- International College",
+      "region": "outside_london"
+    },
+    {
+      "id": 853,
+      "name": "(NAVITAS) Hertfordshire International College",
+      "region": "outside_london"
+    },
+    {
+      "id": 934,
+      "name": "(NAVITAS) International College of Portsmouth",
+      "region": "outside_london"
+    },
+    {
+      "id": 1180,
+      "name": "(NAVITAS) Keele University International College",
+      "region": "outside_london"
+    },
+    {
+      "id": 981,
+      "name": "(NAVITAS) Lancaster University",
+      "region": "outside_london"
+    },
+    {
+      "id": 854,
+      "name": "(NAVITAS) London Brunel International College",
+      "region": "london"
+    },
+    {
+      "id": 1689,
+      "name": "(NAVITAS) Manchester Metropolitan University International College",
+      "region": "outside_london"
+    },
+    {
+      "id": 369,
+      "name": "(NAVITAS) Robert Gordon University",
+      "region": "outside_london"
+    },
+    {
+      "id": 962,
+      "name": "(NAVITAS) The College, Swansea University",
+      "region": "outside_london"
+    },
+    {
+      "id": 1121,
+      "name": "(NAVITAS) University Academy 92",
+      "region": "outside_london"
+    },
+    {
+      "id": 982,
+      "name": "(NAVITAS) University of Leicester Global Study Centre",
+      "region": "outside_london"
+    },
+    {
+      "id": 856,
+      "name": "(NAVITAS) University of Northampton International College",
+      "region": "outside_london"
+    },
+    {
+      "id": 855,
+      "name": "(NAVITAS) University of Plymouth International College",
+      "region": "outside_london"
+    },
+    {
+      "id": 1026,
+      "name": "(NCUK) University of Salford",
+      "region": "outside_london"
+    },
+    {
+      "id": 1075,
+      "name": "(ONCAMPUS) Aston University",
+      "region": "outside_london"
+    },
+    {
+      "id": 974,
+      "name": "(ONCAMPUS) Birkbeck, University of London",
+      "region": "london"
+    },
+    {
+      "id": 937,
+      "name": "(ONCAMPUS) Coventry University",
+      "region": "outside_london"
+    },
+    {
+      "id": 976,
+      "name": "(ONCAMPUS) Goldsmiths University of London",
+      "region": "london"
+    },
+    {
+      "id": 997,
+      "name": "(ONCAMPUS) London South Bank University",
+      "region": "london"
+    },
+    {
+      "id": 1352,
+      "name": "(ONCAMPUS) Loughborough University",
+      "region": "outside_london"
+    },
+    {
+      "id": 940,
+      "name": "(ONCAMPUS) Queen Mary University of London",
+      "region": "london"
+    },
+    {
+      "id": 1222,
+      "name": "(ONCAMPUS) Royal Holloway University of London",
+      "region": "london"
+    },
+    {
+      "id": 1069,
+      "name": "(ONCAMPUS) Royal Veterinary College, University of London",
+      "region": "london"
+    },
+    {
+      "id": 1068,
+      "name": "(ONCAMPUS) The Courtauld University of Art",
+      "region": "london"
+    },
+    {
+      "id": 970,
+      "name": "(ONCAMPUS) University of Central Lancashire",
+      "region": "outside_london"
+    },
+    {
+      "id": 971,
+      "name": "(ONCAMPUS) University of Hull",
+      "region": "outside_london"
+    },
+    {
+      "id": 972,
+      "name": "(ONCAMPUS) University of Reading",
+      "region": "outside_london"
+    },
+    {
+      "id": 1079,
+      "name": "(ONCAMPUS) University of Southampton",
+      "region": "outside_london"
+    },
+    {
+      "id": 1004,
+      "name": "(ONCAMPUS) University of Sunderland",
+      "region": "outside_london"
+    },
+    {
+      "id": 1008,
+      "name": "(OXFORD INTERNATIONAL EDUCATION GROUP) Bangor University International College",
+      "region": "outside_london"
+    },
+    {
+      "id": 1009,
+      "name": "(OXFORD INTERNATIONAL EDUCATION GROUP) De Montfort University International College",
+      "region": "outside_london"
+    },
+    {
+      "id": 1433,
+      "name": "(OXFORD INTERNATIONAL EDUCATION GROUP) Edinburgh Napier University International College",
+      "region": "outside_london"
+    },
+    {
+      "id": 1033,
+      "name": "(OXFORD INTERNATIONAL EDUCATION GROUP) International College Dundee",
+      "region": "outside_london"
+    },
+    {
+      "id": 1165,
+      "name": "(OXFORD INTERNATIONAL EDUCATION GROUP) University of Bradford International College",
+      "region": "outside_london"
+    },
+    {
+      "id": 1032,
+      "name": "(OXFORD INTERNATIONAL EDUCATION GROUP) University of Greenwich International College",
+      "region": "london"
+    },
+    {
+      "id": 1462,
+      "name": "(OXFORD INTERNATIONAL EDUCATION GROUP) University of Kent International College",
+      "region": "outside_london"
+    },
+    {
+      "id": 1012,
+      "name": "(PEARL ACADEMY) Manchester Metropolitan University",
+      "region": "outside_london"
+    },
+    {
+      "id": 1013,
+      "name": "(PEARL ACADEMY) Nottingham Trent University",
+      "region": "outside_london"
+    },
+    {
+      "id": 1015,
+      "name": "(PEARL ACADEMY) Univeristy of Derby",
+      "region": "outside_london"
+    },
+    {
+      "id": 1016,
+      "name": "(PEARL ACADEMY) University for the Creative Arts",
+      "region": "outside_london"
+    },
+    {
+      "id": 964,
+      "name": "(QAHE) Northumbria University",
+      "region": "outside_london"
+    },
+    {
+      "id": 966,
+      "name": "(QAHE) Solent University",
+      "region": "outside_london"
+    },
+    {
+      "id": 965,
+      "name": "(QAHE) University of Roehampton",
+      "region": "london"
+    },
+    {
+      "id": 1111,
+      "name": "(QAHE) University of South Wales",
+      "region": "outside_london"
+    },
+    {
+      "id": 713,
+      "name": "(STUDY GROUP) Bellerbys College, Brighton",
+      "region": "outside_london"
+    },
+    {
+      "id": 977,
+      "name": "(STUDY GROUP) Cardiff University International Study Centre",
+      "region": "outside_london"
+    },
+    {
+      "id": 978,
+      "name": "(STUDY GROUP) Coventry University London International Study Centre",
+      "region": "london"
+    },
+    {
+      "id": 958,
+      "name": "(STUDY GROUP) Durham University, Durham",
+      "region": "outside_london"
+    },
+    {
+      "id": 957,
+      "name": "(STUDY GROUP) Lancaster University, Lancaster",
+      "region": "outside_london"
+    },
+    {
+      "id": 945,
+      "name": "(STUDY GROUP) Leeds Beckett University, Leeds",
+      "region": "outside_london"
+    },
+    {
+      "id": 951,
+      "name": "(STUDY GROUP) Liverpool John Moores University, Liverpool",
+      "region": "outside_london"
+    },
+    {
+      "id": 963,
+      "name": "(STUDY GROUP) Royal Holloway, University of London International Study Centre",
+      "region": "london"
+    },
+    {
+      "id": 1127,
+      "name": "(STUDY GROUP) Teesside University International Study Centre",
+      "region": "outside_london"
+    },
+    {
+      "id": 956,
+      "name": "(STUDY GROUP) The University of Sheffield International College",
+      "region": "outside_london"
+    },
+    {
+      "id": 960,
+      "name": "(STUDY GROUP) University of Aberdeen International Study Centre",
+      "region": "outside_london"
+    },
+    {
+      "id": 968,
+      "name": "(STUDY GROUP) University of East London International Study Centre - UK",
+      "region": "london"
+    },
+    {
+      "id": 944,
+      "name": "(STUDY GROUP) University of Huddersfield",
+      "region": "outside_london"
+    },
+    {
+      "id": 973,
+      "name": "(STUDY GROUP) University of Kingston International Study Centre",
+      "region": "london"
+    },
+    {
+      "id": 953,
+      "name": "(STUDY GROUP) University of Leeds, Leeds",
+      "region": "outside_london"
+    },
+    {
+      "id": 952,
+      "name": "(STUDY GROUP) University of Lincoln, Lincoln",
+      "region": "outside_london"
+    },
+    {
+      "id": 967,
+      "name": "(STUDY GROUP) University of Strathclyde International Study Centre",
+      "region": "outside_london"
+    },
+    {
+      "id": 954,
+      "name": "(STUDY GROUP) University of Surrey International Study Centre",
+      "region": "london"
+    },
+    {
+      "id": 955,
+      "name": "(STUDY GROUP) University of Sussex, Falmer",
+      "region": "outside_london"
+    },
+    {
+      "id": 1183,
+      "name": "Abertay University",
+      "region": "outside_london"
+    },
+    {
+      "id": 324,
+      "name": "Aberystwyth University",
+      "region": "outside_london"
+    },
+    {
+      "id": 340,
+      "name": "Anglia Ruskin University",
+      "region": "outside_london"
+    },
+    {
+      "id": 1354,
+      "name": "Anglia Ruskin University (Cambridge)",
+      "region": "outside_london"
+    },
+    {
+      "id": 1353,
+      "name": "Anglia Ruskin University (Chelmsford)",
+      "region": "outside_london"
+    },
+    {
+      "id": 1389,
+      "name": "Anglia Ruskin University, London",
+      "region": "london"
+    },
+    {
+      "id": 1390,
+      "name": "Anglia Ruskin University, Peterborough",
+      "region": "outside_london"
+    },
+    {
+      "id": 1540,
+      "name": "Anglia Ruskin University, Writtle",
+      "region": "outside_london"
+    },
+    {
+      "id": 1169,
+      "name": "Aston University",
+      "region": "outside_london"
+    },
+    {
+      "id": 1658,
+      "name": "Aston University, London",
+      "region": "london"
+    },
+    {
+      "id": 322,
+      "name": "Bangor University",
+      "region": "outside_london"
+    },
+    {
+      "id": 1702,
+      "name": "Bath Spa University",
+      "region": "outside_london"
+    },
+    {
+      "id": 1722,
+      "name": "Bath Spa University, London",
+      "region": "london"
+    },
+    {
+      "id": 1692,
+      "name": "BIMM University (Birmingham)",
+      "region": "outside_london"
+    },
+    {
+      "id": 1690,
+      "name": "BIMM University (Brighton)",
+      "region": "outside_london"
+    },
+    {
+      "id": 1693,
+      "name": "BIMM University (Bristol)",
+      "region": "outside_london"
+    },
+    {
+      "id": 1691,
+      "name": "BIMM University (London)",
+      "region": "london"
+    },
+    {
+      "id": 1694,
+      "name": "BIMM University (Manchester)",
+      "region": "outside_london"
+    },
+    {
+      "id": 353,
+      "name": "Birmingham City University",
+      "region": "outside_london"
+    },
+    {
+      "id": 1342,
+      "name": "Bishop Grosseteste University",
+      "region": "outside_london"
+    },
+    {
+      "id": 1340,
+      "name": "Bloomsbury Institute London",
+      "region": "london"
+    },
+    {
+      "id": 839,
+      "name": "Bournemouth University",
+      "region": "outside_london"
+    },
+    {
+      "id": 363,
+      "name": "BPP University",
+      "region": "london"
+    },
+    {
+      "id": 818,
+      "name": "Brunel University of London",
+      "region": "london"
+    },
+    {
+      "id": 1082,
+      "name": "Cambridge School of Visual & Performing Arts",
+      "region": "outside_london"
+    },
+    {
+      "id": 1184,
+      "name": "Canterbury Christ Church University",
+      "region": "outside_london"
+    },
+    {
+      "id": 349,
+      "name": "Cardiff Metropolitan University",
+      "region": "outside_london"
+    },
+    {
+      "id": 1578,
+      "name": "Cardiff University",
+      "region": "outside_london"
+    },
+    {
+      "id": 1128,
+      "name": "CATS College",
+      "region": "outside_london"
+    },
+    {
+      "id": 1545,
+      "name": "City, University of London",
+      "region": "london"
+    },
+    {
+      "id": 327,
+      "name": "Coventry University",
+      "region": "outside_london"
+    },
+    {
+      "id": 871,
+      "name": "Coventry University, Coventry",
+      "region": "outside_london"
+    },
+    {
+      "id": 872,
+      "name": "Coventry University, London",
+      "region": "london"
+    },
+    {
+      "id": 308,
+      "name": "Cranfield University",
+      "region": "outside_london"
+    },
+    {
+      "id": 1208,
+      "name": "CU (Coventry)",
+      "region": "outside_london"
+    },
+    {
+      "id": 1207,
+      "name": "CU (London, Dagenham)",
+      "region": "london"
+    },
+    {
+      "id": 1622,
+      "name": "CU (London, Greenwich)",
+      "region": "london"
+    },
+    {
+      "id": 1193,
+      "name": "CU (Scarborough)",
+      "region": "outside_london"
+    },
+    {
+      "id": 338,
+      "name": "De Montfort University",
+      "region": "outside_london"
+    },
+    {
+      "id": 1714,
+      "name": "De Montfort University, London",
+      "region": "london"
+    },
+    {
+      "id": 1037,
+      "name": "Durham University",
+      "region": "outside_london"
+    },
+    {
+      "id": 342,
+      "name": "Edinburgh Napier University",
+      "region": "outside_london"
+    },
+    {
+      "id": 351,
+      "name": "Glasgow Caledonian University",
+      "region": "outside_london"
+    },
+    {
+      "id": 1456,
+      "name": "Glion Institute of Higher Education",
+      "region": "outside_london"
+    },
+    {
+      "id": 1404,
+      "name": "Goldsmiths, University of London",
+      "region": "london"
+    },
+    {
+      "id": 1700,
+      "name": "Health Science University",
+      "region": "london"
+    },
+    {
+      "id": 317,
+      "name": "Heriot Watt University",
+      "region": "outside_london"
+    },
+    {
+      "id": 361,
+      "name": "Hult International Business School",
+      "region": "london"
+    },
+    {
+      "id": 1097,
+      "name": "Indian School of Business & Finance (ISBF)",
+      "region": "outside_london"
+    },
+    {
+      "id": 884,
+      "name": "INTO Manchester",
+      "region": "outside_london"
+    },
+    {
+      "id": 365,
+      "name": "Istituto Marangoni",
+      "region": "london"
+    },
+    {
+      "id": 387,
+      "name": "Kaplan- Cranfield University",
+      "region": "outside_london"
+    },
+    {
+      "id": 388,
+      "name": "Kaplan- The University of Nottingham- UG Pathway Programs",
+      "region": "outside_london"
+    },
+    {
+      "id": 1107,
+      "name": "Keele University",
+      "region": "outside_london"
+    },
+    {
+      "id": 1780,
+      "name": "Kings Cornerstone International College, Chennai, India and Ulster University, United Kingdom",
+      "region": "outside_london"
+    },
+    {
+      "id": 1776,
+      "name": "Kings Cornerstone International College, Chennai, India and University of Essex, United Kingdom",
+      "region": "outside_london"
+    },
+    {
+      "id": 1778,
+      "name": "Kings Cornerstone International College, Chennai, India and University of Sunderland, United Kingdom",
+      "region": "outside_london"
+    },
+    {
+      "id": 862,
+      "name": "Kingston University",
+      "region": "london"
+    },
+    {
+      "id": 1095,
+      "name": "Lancaster University",
+      "region": "outside_london"
+    },
+    {
+      "id": 364,
+      "name": "Le - Cordon Bleu",
+      "region": "london"
+    },
+    {
+      "id": 1510,
+      "name": "Leeds Arts University",
+      "region": "outside_london"
+    },
+    {
+      "id": 359,
+      "name": "Leeds Beckett University",
+      "region": "outside_london"
+    },
+    {
+      "id": 1453,
+      "name": "Leeds Trinity University",
+      "region": "outside_london"
+    },
+    {
+      "id": 345,
+      "name": "Liverpool Hope University",
+      "region": "outside_london"
+    },
+    {
+      "id": 328,
+      "name": "London Metropolitan University",
+      "region": "london"
+    },
+    {
+      "id": 355,
+      "name": "London South Bank University",
+      "region": "london"
+    },
+    {
+      "id": 1202,
+      "name": "Loughborough University",
+      "region": "outside_london"
+    },
+    {
+      "id": 1203,
+      "name": "Loughborough University, London",
+      "region": "london"
+    },
+    {
+      "id": 650,
+      "name": "Manchester Metropolitan University",
+      "region": "outside_london"
+    },
+    {
+      "id": 326,
+      "name": "Middlesex University",
+      "region": "london"
+    },
+    {
+      "id": 705,
+      "name": "Navitas - BCUIC",
+      "region": "outside_london"
+    },
+    {
+      "id": 368,
+      "name": "Navitas- Brunel University",
+      "region": "london"
+    },
+    {
+      "id": 311,
+      "name": "Newcastle University",
+      "region": "outside_london"
+    },
+    {
+      "id": 866,
+      "name": "Northumbria University, London",
+      "region": "london"
+    },
+    {
+      "id": 331,
+      "name": "Northumbria University, Newcastle",
+      "region": "outside_london"
+    },
+    {
+      "id": 1588,
+      "name": "Northumbria University, Newcastle (Online)",
+      "region": "outside_london"
+    },
+    {
+      "id": 1190,
+      "name": "Norwich University of the Arts",
+      "region": "outside_london"
+    },
+    {
+      "id": 323,
+      "name": "Nottingham Trent University",
+      "region": "outside_london"
+    },
+    {
+      "id": 1647,
+      "name": "Online Business School",
+      "region": "outside_london"
+    },
+    {
+      "id": 319,
+      "name": "Oxford Brookes University",
+      "region": "outside_london"
+    },
+    {
+      "id": 1587,
+      "name": "Oxford Brookes University (Online)",
+      "region": "outside_london"
+    },
+    {
+      "id": 309,
+      "name": "Queen Mary University of London",
+      "region": "london"
+    },
+    {
+      "id": 1575,
+      "name": "Queen Mary University of London (Online)",
+      "region": "london"
+    },
+    {
+      "id": 312,
+      "name": "Queen`s University Belfast",
+      "region": "outside_london"
+    },
+    {
+      "id": 1254,
+      "name": "Ravensbourne University London",
+      "region": "london"
+    },
+    {
+      "id": 1216,
+      "name": "Regent College London",
+      "region": "london"
+    },
+    {
+      "id": 917,
+      "name": "Regent's University London",
+      "region": "london"
+    },
+    {
+      "id": 1343,
+      "name": "Richmond American University",
+      "region": "outside_london"
+    },
+    {
+      "id": 1308,
+      "name": "Robert Gordon University",
+      "region": "outside_london"
+    },
+    {
+      "id": 1328,
+      "name": "Robert Gordon University (Online)",
+      "region": "outside_london"
+    },
+    {
+      "id": 909,
+      "name": "Royal Holloway University of London",
+      "region": "london"
+    },
+    {
+      "id": 347,
+      "name": "Sheffield Hallam University",
+      "region": "outside_london"
+    },
+    {
+      "id": 1620,
+      "name": "SOAS University of London",
+      "region": "london"
+    },
+    {
+      "id": 900,
+      "name": "Southampton Solent University",
+      "region": "outside_london"
+    },
+    {
+      "id": 1526,
+      "name": "SP Jain London School of Management",
+      "region": "london"
+    },
+    {
+      "id": 1209,
+      "name": "St George's, University of London",
+      "region": "london"
+    },
+    {
+      "id": 1551,
+      "name": "St. Mary's University Twickenham, London",
+      "region": "london"
+    },
+    {
+      "id": 377,
+      "name": "Study Group- Kingston University",
+      "region": "london"
+    },
+    {
+      "id": 373,
+      "name": "Study Group- Royal Holloway University",
+      "region": "london"
+    },
+    {
+      "id": 902,
+      "name": "Swansea University",
+      "region": "outside_london"
+    },
+    {
+      "id": 708,
+      "name": "Teesside University",
+      "region": "outside_london"
+    },
+    {
+      "id": 1345,
+      "name": "Teesside University (London)",
+      "region": "london"
+    },
+    {
+      "id": 1394,
+      "name": "The Engineering and Design Institute London",
+      "region": "london"
+    },
+    {
+      "id": 1754,
+      "name": "The Glasgow School of Art",
+      "region": "outside_london"
+    },
+    {
+      "id": 1131,
+      "name": "The University of Buckingham",
+      "region": "outside_london"
+    },
+    {
+      "id": 336,
+      "name": "The University of Huddersfield",
+      "region": "outside_london"
+    },
+    {
+      "id": 905,
+      "name": "The University of Huddersfield, London",
+      "region": "london"
+    },
+    {
+      "id": 344,
+      "name": "The University of Northampton",
+      "region": "outside_london"
+    },
+    {
+      "id": 1060,
+      "name": "The University of Sheffield",
+      "region": "outside_london"
+    },
+    {
+      "id": 1821,
+      "name": "The WorldGrad, Mumbai, India and Bishop Grosseteste University, Lincoln, UK",
+      "region": "outside_london"
+    },
+    {
+      "id": 1829,
+      "name": "The WorldGrad, Mumbai, India and De Montfort University, Leicester, UK",
+      "region": "outside_london"
+    },
+    {
+      "id": 1831,
+      "name": "The WorldGrad, Mumbai, India and Edge Hill University, Ormskirk, UK",
+      "region": "outside_london"
+    },
+    {
+      "id": 1820,
+      "name": "The WorldGrad, Mumbai, India and London Metropolitan University, London, UK",
+      "region": "london"
+    },
+    {
+      "id": 1826,
+      "name": "The WorldGrad, Mumbai, India and Northumbria University Newcastle, UK",
+      "region": "outside_london"
+    },
+    {
+      "id": 1824,
+      "name": "The WorldGrad, Mumbai, India and University of Bedfordshire, Luton, UK",
+      "region": "outside_london"
+    },
+    {
+      "id": 1823,
+      "name": "The WorldGrad, Mumbai, India and University of Central Lancashire, Preston, UK",
+      "region": "outside_london"
+    },
+    {
+      "id": 1828,
+      "name": "The WorldGrad, Mumbai, India and University of Portsmouth, Portsmouth, UK",
+      "region": "outside_london"
+    },
+    {
+      "id": 1827,
+      "name": "The WorldGrad, Mumbai, India and University of Sunderland, Sunderland, UK",
+      "region": "outside_london"
+    },
+    {
+      "id": 1825,
+      "name": "The WorldGrad, Mumbai, India and University of the West of England, Bristol, UK",
+      "region": "outside_london"
+    },
+    {
+      "id": 1830,
+      "name": "The WorldGrad, Mumbai, India and Wrexham Glyndwr University, Wrexham, UK",
+      "region": "outside_london"
+    },
+    {
+      "id": 865,
+      "name": "Ulster University, Birmingham Campus",
+      "region": "outside_london"
+    },
+    {
+      "id": 366,
+      "name": "Ulster University, London Campus",
+      "region": "london"
+    },
+    {
+      "id": 1648,
+      "name": "Ulster University, Manchester Campus",
+      "region": "outside_london"
+    },
+    {
+      "id": 1080,
+      "name": "University College Birmingham",
+      "region": "outside_london"
+    },
+    {
+      "id": 939,
+      "name": "University for the Creative Arts",
+      "region": "outside_london"
+    },
+    {
+      "id": 1084,
+      "name": "University of Aberdeen",
+      "region": "outside_london"
+    },
+    {
+      "id": 1235,
+      "name": "University of Bath",
+      "region": "outside_london"
+    },
+    {
+      "id": 358,
+      "name": "University of Bedfordshire",
+      "region": "outside_london"
+    },
+    {
+      "id": 307,
+      "name": "University of Birmingham",
+      "region": "outside_london"
+    },
+    {
+      "id": 325,
+      "name": "University of Bradford",
+      "region": "outside_london"
+    },
+    {
+      "id": 961,
+      "name": "University of Brighton",
+      "region": "outside_london"
+    },
+    {
+      "id": 600,
+      "name": "University of Bristol",
+      "region": "outside_london"
+    },
+    {
+      "id": 1745,
+      "name": "University of Central Lancashire (Online)",
+      "region": "outside_london"
+    },
+    {
+      "id": 339,
+      "name": "University of Chester",
+      "region": "outside_london"
+    },
+    {
+      "id": 1525,
+      "name": "University of Chichester",
+      "region": "outside_london"
+    },
+    {
+      "id": 1746,
+      "name": "University of Cumbria",
+      "region": "outside_london"
+    },
+    {
+      "id": 1747,
+      "name": "University of Cumbria, Lancaster",
+      "region": "outside_london"
+    },
+    {
+      "id": 1748,
+      "name": "University of Cumbria, London",
+      "region": "london"
+    },
+    {
+      "id": 1569,
+      "name": "University of Derby",
+      "region": "outside_london"
+    },
+    {
+      "id": 389,
+      "name": "University of Dundee",
+      "region": "outside_london"
+    },
+    {
+      "id": 948,
+      "name": "University of East Anglia",
+      "region": "outside_london"
+    },
+    {
+      "id": 333,
+      "name": "University of East London",
+      "region": "london"
+    },
+    {
+      "id": 318,
+      "name": "University of Essex",
+      "region": "outside_london"
+    },
+    {
+      "id": 1154,
+      "name": "University of Exeter",
+      "region": "outside_london"
+    },
+    {
+      "id": 306,
+      "name": "University of Glasgow",
+      "region": "outside_london"
+    },
+    {
+      "id": 343,
+      "name": "University of Gloucestershire",
+      "region": "outside_london"
+    },
+    {
+      "id": 1241,
+      "name": "University of Greater Manchester (Previously known as University of Bolton)",
+      "region": "outside_london"
+    },
+    {
+      "id": 334,
+      "name": "University of Greenwich",
+      "region": "london"
+    },
+    {
+      "id": 335,
+      "name": "University of Hertfordshire",
+      "region": "outside_london"
+    },
+    {
+      "id": 1511,
+      "name": "University of Hull, Hull",
+      "region": "outside_london"
+    },
+    {
+      "id": 1501,
+      "name": "University of Hull, London",
+      "region": "london"
+    },
+    {
+      "id": 1677,
+      "name": "University of Kent",
+      "region": "outside_london"
+    },
+    {
+      "id": 332,
+      "name": "University of Lancashire (Previously known as University of Central Lancashire)",
+      "region": "outside_london"
+    },
+    {
+      "id": 1266,
+      "name": "University of Law (Birmingham)",
+      "region": "outside_london"
+    },
+    {
+      "id": 1274,
+      "name": "University of Law (Bristol)",
+      "region": "outside_london"
+    },
+    {
+      "id": 1267,
+      "name": "University of Law (Chester)",
+      "region": "outside_london"
+    },
+    {
+      "id": 1275,
+      "name": "University of Law (Exeter)",
+      "region": "outside_london"
+    },
+    {
+      "id": 1268,
+      "name": "University of Law (Guildford)",
+      "region": "outside_london"
+    },
+    {
+      "id": 1276,
+      "name": "University of Law (Leeds)",
+      "region": "outside_london"
+    },
+    {
+      "id": 1269,
+      "name": "University of Law (Liverpool)",
+      "region": "outside_london"
+    },
+    {
+      "id": 1277,
+      "name": "University of Law (London, Bloomsbury)",
+      "region": "london"
+    },
+    {
+      "id": 1701,
+      "name": "University of Law (London, Moorgate)",
+      "region": "london"
+    },
+    {
+      "id": 1270,
+      "name": "University of Law (Manchester)",
+      "region": "outside_london"
+    },
+    {
+      "id": 1278,
+      "name": "University of Law (Newcastle)",
+      "region": "outside_london"
+    },
+    {
+      "id": 1271,
+      "name": "University of Law (Norwich)",
+      "region": "outside_london"
+    },
+    {
+      "id": 1279,
+      "name": "University of Law (Nottingham)",
+      "region": "outside_london"
+    },
+    {
+      "id": 1272,
+      "name": "University of Law (Online)",
+      "region": "outside_london"
+    },
+    {
+      "id": 1280,
+      "name": "University of Law (Reading)",
+      "region": "outside_london"
+    },
+    {
+      "id": 1273,
+      "name": "University of Law (Sheffield)",
+      "region": "outside_london"
+    },
+    {
+      "id": 1281,
+      "name": "University of Law (Southampton)",
+      "region": "outside_london"
+    },
+    {
+      "id": 1132,
+      "name": "University of Leeds",
+      "region": "outside_london"
+    },
+    {
+      "id": 313,
+      "name": "University of Leicester",
+      "region": "outside_london"
+    },
+    {
+      "id": 1742,
+      "name": "University of Leicester (Online)",
+      "region": "outside_london"
+    },
+    {
+      "id": 1731,
+      "name": "University of Leicester, Leicester, UK and The Apollo University, Chittoor, Andhra Pradesh, India",
+      "region": "outside_london"
+    },
+    {
+      "id": 1454,
+      "name": "University of Lincoln",
+      "region": "outside_london"
+    },
+    {
+      "id": 310,
+      "name": "University of Liverpool",
+      "region": "outside_london"
+    },
+    {
+      "id": 847,
+      "name": "University of Manchester",
+      "region": "outside_london"
+    },
+    {
+      "id": 1078,
+      "name": "University of Nottingham",
+      "region": "outside_london"
+    },
+    {
+      "id": 329,
+      "name": "University of Plymouth",
+      "region": "outside_london"
+    },
+    {
+      "id": 367,
+      "name": "University of Portsmouth",
+      "region": "outside_london"
+    },
+    {
+      "id": 1426,
+      "name": "University of Portsmouth, London",
+      "region": "london"
+    },
+    {
+      "id": 1655,
+      "name": "University of Reading",
+      "region": "outside_london"
+    },
+    {
+      "id": 348,
+      "name": "University of Roehampton",
+      "region": "london"
+    },
+    {
+      "id": 337,
+      "name": "University of Salford",
+      "region": "outside_london"
+    },
+    {
+      "id": 356,
+      "name": "University of South Wales",
+      "region": "outside_london"
+    },
+    {
+      "id": 1732,
+      "name": "University of South Wales, Newport, UK  and RIIM, Pune, India",
+      "region": "outside_london"
+    },
+    {
+      "id": 1146,
+      "name": "University of Southampton",
+      "region": "outside_london"
+    },
+    {
+      "id": 1351,
+      "name": "University of Southampton (Winchester)",
+      "region": "outside_london"
+    },
+    {
+      "id": 341,
+      "name": "University of Staffordshire",
+      "region": "outside_london"
+    },
+    {
+      "id": 1607,
+      "name": "University of Staffordshire, London",
+      "region": "london"
+    },
+    {
+      "id": 321,
+      "name": "University of Stirling",
+      "region": "outside_london"
+    },
+    {
+      "id": 1029,
+      "name": "University of Stirling, London Campus",
+      "region": "london"
+    },
+    {
+      "id": 315,
+      "name": "University of Strathclyde",
+      "region": "outside_london"
+    },
+    {
+      "id": 914,
+      "name": "University of Suffolk",
+      "region": "outside_london"
+    },
+    {
+      "id": 1662,
+      "name": "University of Suffolk, London",
+      "region": "london"
+    },
+    {
+      "id": 346,
+      "name": "University of Sunderland",
+      "region": "outside_london"
+    },
+    {
+      "id": 874,
+      "name": "University of Sunderland, London",
+      "region": "london"
+    },
+    {
+      "id": 873,
+      "name": "University of Sunderland, Sunderland",
+      "region": "outside_london"
+    },
+    {
+      "id": 314,
+      "name": "University of Surrey",
+      "region": "outside_london"
+    },
+    {
+      "id": 1455,
+      "name": "University of Sussex",
+      "region": "outside_london"
+    },
+    {
+      "id": 933,
+      "name": "University of the West of England, Bristol",
+      "region": "outside_london"
+    },
+    {
+      "id": 352,
+      "name": "University of the West of Scotland",
+      "region": "outside_london"
+    },
+    {
+      "id": 1493,
+      "name": "University of the West of Scotland, London",
+      "region": "london"
+    },
+    {
+      "id": 1566,
+      "name": "University of Wales Trinity Saint David, Birmingham",
+      "region": "outside_london"
+    },
+    {
+      "id": 1565,
+      "name": "University of Wales Trinity Saint David, London",
+      "region": "london"
+    },
+    {
+      "id": 1568,
+      "name": "University of Wales Trinity Saint David, Swansea",
+      "region": "outside_london"
+    },
+    {
+      "id": 350,
+      "name": "University of West London",
+      "region": "london"
+    },
+    {
+      "id": 357,
+      "name": "University of Westminster",
+      "region": "london"
+    },
+    {
+      "id": 1197,
+      "name": "University of Winchester",
+      "region": "outside_london"
+    },
+    {
+      "id": 360,
+      "name": "University of Wolverhampton",
+      "region": "outside_london"
+    },
+    {
+      "id": 1703,
+      "name": "University of Worcester",
+      "region": "outside_london"
+    },
+    {
+      "id": 899,
+      "name": "University of York",
+      "region": "outside_london"
+    },
+    {
+      "id": 1314,
+      "name": "York St John University (London)",
+      "region": "london"
+    },
+    {
+      "id": 1179,
+      "name": "York St John University (York)",
+      "region": "outside_london"
+    }
+  ],
+  "account_types": [
+    "Student",
+    "Parent",
+    "Sponsor"
+  ],
+  "branding": {
+    "company_name": "KC Overseas Education",
+    "product_name": "UK Visa Funds & IHS Calculator",
+    "primary_color": "#226cf5",
+    "secondary_color": "#1951b7",
+    "accent_color": "#5990f7",
+    "logo_text": "KC",
+    "footer_note": "Internal guidance tool. Always cross-check with latest GOV.UK requirements before filing.",
+    "logo_web": "/assets/kc-logo.svg",
+    "logo_pdf": "public/assets/kc_logo.png"
+  },
+  "server": {
+    "port": 3000
+  },
+  "access": {
+    "enabled": false,
+    "code": "CHANGE-ME"
+  }
+}

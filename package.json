@@ -1,16 +1,19 @@
 {
   "name": "uk-visa-ihs-funds-calculator",
-  "version": "2.0.0",
+  "version": "2.3.1",
   "description": "IHS + funds required + funds available (28-day) calculator with online config + FX + PDF export",
   "main": "server.js",
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "smoke": "node scripts/smoke-test.js"
   },
   "dependencies": {
+    "csv-parse": "^5.6.0",
     "express": "^4.19.2",
     "morgan": "^1.10.0",
-    "pdfkit": "^0.15.0"
+    "pdfkit": "^0.15.0",
+    "xlsx": "^0.18.5"
   }
 }
