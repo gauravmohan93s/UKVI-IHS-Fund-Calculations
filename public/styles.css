@@ -313,3 +313,10 @@ button:disabled{opacity:.6;cursor:not-allowed}
 .fxpanel{margin-top:10px;border:1px solid var(--line);border-radius:14px;background:#fff;padding:10px 12px}
 .fxpanel summary{cursor:pointer;font-weight:800}
 .fxrow{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:10px}
+.fxpanel textarea{
+  width:100%;
+  border-radius:12px;
+  border:1px solid var(--line);
+  padding:10px 12px;
+  resize:vertical;
+}

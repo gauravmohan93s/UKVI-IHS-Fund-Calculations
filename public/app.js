@@ -5,6 +5,7 @@ const els = {
   fxFallbackNote: $("fxFallbackNote"),
   manualInrPerGbp: $("manualInrPerGbp"),
   useManualFx: $("useManualFx"),
+  manualFxOverrides: $("manualFxOverrides"),
   universityInput: $("universityInput"),
   uniSuggest: $("uniSuggest"),
   formErrors: $("formErrors"),
@@ -44,6 +45,7 @@ const els = {
   fundsTbody: document.querySelector("#fundsTable tbody"),
   fundsSkip: $("fundsSkip"),
   fundsSkipNote: $("fundsSkipNote"),
+  fundsCurrencyAuto: $("fundsCurrencyAuto"),
 
   btnCalc: $("btnCalc"),
   btnPdf: $("btnPdf"),
@@ -101,6 +103,7 @@ function setActiveTab(id){
   document.querySelectorAll(".tab").forEach(b => b.classList.toggle("active", b.dataset.tab === id));
   document.querySelectorAll(".tabpane").forEach(p => p.classList.toggle("active", p.id === id));
   window.scrollTo({ top: 0, behavior: "smooth" });
+  if (id === "t3") calculateAuto();
 }
 
 document.querySelectorAll(".tab").forEach(b => b.addEventListener("click", () => setActiveTab(b.dataset.tab)));
@@ -490,7 +493,12 @@ els.universitySelect.addEventListener("change", () => {
 });
 
 if (els.quote) {
-  els.quote.addEventListener("change", () => { QUOTE_MANUAL = true; });
+  els.quote.addEventListener("change", () => {
+    QUOTE_MANUAL = true;
+    if (els.fundsCurrencyAuto && els.fundsCurrencyAuto.checked) {
+      applyFundsCurrencyToRows();
+    }
+  });
 }
 
 function getFundsRows(){
@@ -518,6 +526,18 @@ function getFundsRows(){
     });
   });
   return rows;
+}
+
+function getDefaultCurrency(){
+  return els.quote?.value || "INR";
+}
+
+function applyFundsCurrencyToRows(){
+  const cur = getDefaultCurrency();
+  els.fundsTbody.querySelectorAll("tr").forEach(tr => {
+    const sel = tr.querySelector("[data-role='currency']");
+    if (sel) sel.value = cur;
+  });
 }
 
 function setFundFieldState(input, enabled){
@@ -586,7 +606,7 @@ function addFundsRow(pref={}){
   const curSel = tr.querySelector("[data-role='currency']");
   fundTypeSel.value = pref.fundType || "bank";
   acctSel.value = pref.accountType || "Student";
-  curSel.value = pref.currency || "GBP";
+  curSel.value = pref.currency || getDefaultCurrency();
 
   fundTypeSel.addEventListener("change", () => updateFundRow(tr));
   tr.querySelector(".icon-btn").addEventListener("click", ()=> tr.remove());
@@ -607,9 +627,14 @@ function toggleFundsSkip(){
   }
 }
 
-els.addRow.addEventListener("click", () => addFundsRow({ fundType:"bank", accountType:"Student", currency:"INR" }));
+els.addRow.addEventListener("click", () => addFundsRow({ fundType:"bank", accountType:"Student", currency:getDefaultCurrency() }));
 els.clearRows.addEventListener("click", () => { els.fundsTbody.innerHTML = ""; });
 if (els.fundsSkip) els.fundsSkip.addEventListener("change", toggleFundsSkip);
+if (els.fundsCurrencyAuto) {
+  els.fundsCurrencyAuto.addEventListener("change", () => {
+    if (els.fundsCurrencyAuto.checked) applyFundsCurrencyToRows();
+  });
+}
 
 async function fx(from, to){
   if (from === to) return 1;
@@ -618,6 +643,20 @@ async function fx(from, to){
   const cached = fx._cache.get(key);
   const now = Date.now();
   if (cached && (now - cached.ts) < 10 * 60 * 1000) return cached.rate;
+  const overrides = parseFxOverrides(els.manualFxOverrides && els.manualFxOverrides.value);
+  if (overrides && Object.keys(overrides).length) {
+    const f = String(from || "").toUpperCase();
+    const t = String(to || "").toUpperCase();
+    if (t === "GBP" && overrides[f]) {
+      fx._cache.set(key, { rate: overrides[f], ts: now });
+      return overrides[f];
+    }
+    if (f === "GBP" && overrides[t]) {
+      const rate = 1 / overrides[t];
+      fx._cache.set(key, { rate, ts: now });
+      return rate;
+    }
+  }
   const manualEnabled = Boolean(els.useManualFx && els.useManualFx.checked);
   const manualRate = Number(els.manualInrPerGbp && els.manualInrPerGbp.value || 0);
   const manualQuery = (manualEnabled && manualRate > 0)
@@ -635,6 +674,7 @@ async function fx(from, to){
 }
 
 function payload(){
+  const overrides = parseFxOverrides(els.manualFxOverrides && els.manualFxOverrides.value);
   return {
     routeKey: "student",
     universityName: els.universitySelect.value || "",
@@ -672,7 +712,8 @@ function payload(){
 
     manualFx: {
       enabled: Boolean(els.useManualFx && els.useManualFx.checked),
-      inrPerGbp: Number(els.manualInrPerGbp && els.manualInrPerGbp.value || 0)
+      inrPerGbp: Number(els.manualInrPerGbp && els.manualInrPerGbp.value || 0),
+      overrides
     }
   };
 }
@@ -717,10 +758,7 @@ function validateTab(tabId){
     // application date optional (defaults to today)
   }
   if (tabId === "t2"){
-    // Fees can be 0 but must be numbers; no mandatory besides dependants default 0
-  }
-  if (tabId === "t3"){
-    // At least one funds row required
+    // At least one funds row required unless skipped
     const skip = Boolean(els.fundsSkip && els.fundsSkip.checked);
     const rows = getFundsRows();
     if (!skip && !rows.length) errs.push("Add at least one fund row or use the skip option.");
@@ -766,13 +804,28 @@ async function updateIhsQuick(){
 }
 
 async function calculate(){
+  await calculateInternal(true);
+}
+
+async function calculateInternal(allowAlert){
   const err = validateCore();
-  if (err) { alert(err); return; }
+  if (err) { if (allowAlert) alert(err); else showErrors([err]); return; }
 
   const body = payload();
+  const cacheKey = stableStringify(body);
+  if (!calculateInternal._cache) calculateInternal._cache = new Map();
+  const cached = calculateInternal._cache.get(cacheKey);
+  if (cached && (Date.now() - cached.ts) < 15000) {
+    return await renderReport(cached.out, body);
+  }
   const out = await apiFetch("/api/report", { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify(body) }).then(r=>r.json());
-  if (out.error) { alert(out.error); return; }
+  if (out.error) { if (allowAlert) alert(out.error); return; }
+  calculateInternal._cache.set(cacheKey, { out, ts: Date.now() });
 
+  return await renderReport(out, body);
+}
+
+async function renderReport(out, body){
   const quote = els.quote.value;
   const gbpToQuote = await fx("GBP", quote);
 
@@ -880,8 +933,34 @@ async function calculate(){
     `Maintenance months cap applied: <strong>${out.fundsRequired.monthsRequired}</strong>.`;
 }
 
+async function calculateAuto(){
+  await calculateInternal(false);
+}
+
 function escapeHtml(str){
   return String(str).replace(/[&<>"']/g, s => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[s]));
+}
+
+function parseFxOverrides(text){
+  const out = {};
+  const lines = String(text || "").split(/\r?\n/);
+  lines.forEach((line) => {
+    const raw = line.trim();
+    if (!raw) return;
+    const [k, v] = raw.split(/[:=]/).map(s => s && s.trim());
+    if (!k || !v) return;
+    const code = k.toUpperCase();
+    const rate = Number(v);
+    if (Number.isFinite(rate) && rate > 0) out[code] = rate;
+  });
+  return out;
+}
+
+function stableStringify(obj){
+  if (obj === null || typeof obj !== "object") return JSON.stringify(obj);
+  if (Array.isArray(obj)) return `[${obj.map(stableStringify).join(",")}]`;
+  const keys = Object.keys(obj).sort();
+  return `{${keys.map(k => `${JSON.stringify(k)}:${stableStringify(obj[k])}`).join(",")}}`;
 }
 
 async function downloadPdf(){
@@ -895,10 +974,25 @@ async function downloadPdf(){
     return;
   }
   const blob = await res.blob();
+  const filename = "UK_Visa_IHS_Funds_Report.pdf";
+  if (window.showSaveFilePicker) {
+    try {
+      const handle = await window.showSaveFilePicker({
+        suggestedName: filename,
+        types: [{ description: "PDF", accept: { "application/pdf": [".pdf"] } }]
+      });
+      const writable = await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      return;
+    } catch (e) {
+      // user cancelled or unsupported; fall back
+    }
+  }
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = "UK_Visa_IHS_Funds_Report.pdf";
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   a.remove();

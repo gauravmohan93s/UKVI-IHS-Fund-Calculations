@@ -39,10 +39,9 @@
 <main class="wrap">
   <div class="notice warn" id="formErrors" style="display:none"></div>
   <div class="tabs">
-    <button class="tab active" data-tab="t1">1) Course details</button>
-    <button class="tab" data-tab="t2">2) Fees & dependants</button>
-    <button class="tab" data-tab="t3">3) Funds in bank statement</button>
-    <button class="tab" data-tab="t4">4) Results & PDF</button>
+    <button class="tab active" data-tab="t1">1) Course & application</button>
+    <button class="tab" data-tab="t2">2) Fees & funds</button>
+    <button class="tab" data-tab="t3">3) Results & PDF</button>
   </div>
 
   <section class="card tabpane active" id="t1">
@@ -151,7 +150,10 @@
     <label class="toggle"><input type="checkbox" id="useManualFx"/><span>Use manual INR per 1 GBP</span></label>
     <input id="manualInrPerGbp" type="number" step="0.01" placeholder="e.g., 105.50" style="max-width:220px"/>
   </div>
-  <p class="muted small" style="margin:8px 0 0">Manual FX is applied only when enabled and live FX fetch fails. Supports INR-GBP only.</p>
+  <label class="small" style="margin-top:8px">Manual multi-currency overrides (1 unit = GBP rate)
+    <textarea id="manualFxOverrides" rows="3" placeholder="USD=0.79&#10;EUR=0.86&#10;NGN=0.00061"></textarea>
+  </label>
+  <p class="muted small" style="margin:8px 0 0">Overrides apply when live FX fails. Format: CURRENCY=GBP rate (1 unit of currency equals GBP).</p>
 </details>
     <div class="nav">
       <button class="primary" data-next="t2">Next ></button>
@@ -183,18 +185,16 @@
       </label>
     </div>
 
-    <div class="nav">
-      <button class="secondary" data-prev="t1">Back</button>
-      <button class="primary" data-next="t3">Next ></button>
-    </div>
-  </section>
-
-  <section class="card tabpane" id="t3">
+    <hr/>
     <h2>Funds in bank statement (Inputs)</h2>
     <p class="muted small">Add each fund source line (bank statement, fixed deposit, or education loan). Amount is the closing balance or sanctioned amount. We convert to GBP using live FX.</p>
     <label class="toggle">
       <input type="checkbox" id="fundsSkip"/>
       <span>No funds held yet - skip this section</span>
+    </label>
+    <label class="toggle">
+      <input type="checkbox" id="fundsCurrencyAuto" checked/>
+      <span>Auto-update fund currency when Display currency changes</span>
     </label>
     <div class="helper" id="fundsSkipNote" style="display:none">Funds validation will be skipped and available funds will be treated as GBP 0.</div>
 
@@ -225,12 +225,12 @@
     <p class="muted small">Bank statements require start/end dates. Fixed deposits require a maturity date. Education loans require the disbursement letter date.</p>
 
     <div class="nav">
-      <button class="secondary" data-prev="t2">Back</button>
-      <button class="primary" data-next="t4">Next ></button>
+      <button class="secondary" data-prev="t1">Back</button>
+      <button class="primary" data-next="t3">Next ></button>
     </div>
   </section>
 
-  <section class="card tabpane" id="t4">
+  <section class="card tabpane" id="t3">
     <h2>Results (Read-only)</h2>
     <p class="muted small">Press <strong>Calculate</strong> to refresh results, then use <strong>Download PDF</strong> to export.</p>
 
@@ -293,7 +293,7 @@
     <div class="note muted" id="sourcesNote"></div>
 
     <div class="nav">
-      <button class="secondary" data-prev="t3">Back</button>
+      <button class="secondary" data-prev="t2">Back</button>
     </div>
   </section>
 </main>

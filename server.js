@@ -186,9 +186,24 @@ async function getFx(from, toCsv, manualFx) {
     return data;
   };
 
+  const tryManualOverride = () => {
+    const overrides = manualFx && typeof manualFx === "object" ? manualFx.overrides : null;
+    const f = String(from || "").toUpperCase();
+    const t = String(toCsv || "").toUpperCase();
+    if (overrides && overrides[f] && t === "GBP") {
+      return { rates: { GBP: Number(overrides[f]) }, base: f, date: null, fetchedAt: new Date().toISOString(), fxSource: "manual_override" };
+    }
+    if (overrides && overrides[t] && f === "GBP") {
+      return { rates: { [t]: 1 / Number(overrides[t]) }, base: "GBP", date: null, fetchedAt: new Date().toISOString(), fxSource: "manual_override" };
+    }
+    return null;
+  };
+
   try {
     return await attempt();
   } catch (e) {
+    const override = tryManualOverride();
+    if (override) return override;
     // Manual FX fallback (INR-GBP only)
     const enabled = Boolean(manualFx && manualFx.enabled);
     const inrPerGbp = Number((manualFx && manualFx.inrPerGbp) || 0);
@@ -418,9 +433,16 @@ async function calcFundsAvailable(payload, rules){
     let gbp = amount;
     let rate = 1;
     if (currency !== "GBP") {
-      const fx = await getFx(currency, "GBP", payload.manualFx);
-      rate = safeNum(fx?.rates?.GBP);
-      gbp = rate ? amount * rate : 0;
+      try {
+        const fx = await getFx(currency, "GBP", payload.manualFx);
+        rate = safeNum(fx?.rates?.GBP);
+        gbp = rate ? amount * rate : 0;
+        if (!rate) issues.push(`FX rate unavailable for ${currency}`);
+      } catch (e) {
+        rate = 0;
+        gbp = 0;
+        issues.push(`FX unavailable for ${currency}`);
+      }
     }
 
     totalAllGbp += gbp;
