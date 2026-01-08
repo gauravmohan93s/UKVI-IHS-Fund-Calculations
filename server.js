@@ -936,6 +936,8 @@ app.post("/api/pdf", async (req, res) => {
     const studentRows = [
       { label: "Acknowledgement No", value: payload.studentAckNumber || "-" },
       { label: "Student name", value: payload.studentName || "-" },
+      { label: "Program", value: payload.studentProgram || "-" },
+      { label: "Status", value: payload.studentStatus || "-" },
       { label: "Intake", value: payload.studentIntakeYear || "-" },
       { label: "City / Country", value: studentCityCountry || "-" },
     ];
