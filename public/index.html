@@ -73,38 +73,18 @@
         <input id="studentName" type="text" readonly/>
       </label>
 
-      <label>Program name (auto)
-        <input id="studentProgram" type="text" readonly/>
-      </label>
-
-      <label>Student status (auto)
-        <input id="studentStatus" type="text" readonly/>
-      </label>
-
-      <label>Intake - InYear (auto)
-        <input id="studentIntakeYear" type="text" readonly/>
-      </label>
-
-      <label>City / Country (auto)
-        <input id="studentCityCountry" type="text" readonly/>
-      </label>
+      <input id="studentProgram" type="hidden"/>
+      <input id="studentStatus" type="hidden"/>
+      <input id="studentIntakeYear" type="hidden"/>
+      <input id="studentCityCountry" type="hidden"/>
 
       <label>Counselor (type to search)
         <input id="counselorInput" type="text" placeholder="Start typing counselor name..." autocomplete="off"/>
         <div class="suggest" id="counselorSuggest" style="display:none"></div>
       </label>
-
-      <label>Counselor email (auto)
-        <input id="counselorEmail" type="text" readonly/>
-      </label>
-
-      <label>Counselor region / sub region (auto)
-        <input id="counselorRegion" type="text" readonly/>
-      </label>
-
-      <label>Counselor designation / roles (auto)
-        <input id="counselorDesignation" type="text" readonly/>
-      </label>
+      <input id="counselorEmail" type="hidden"/>
+      <input id="counselorRegion" type="hidden"/>
+      <input id="counselorDesignation" type="hidden"/>
 
       <label>Study location (auto from university)
         <input id="regionDisplay" type="text" value="Outside London" readonly/>
@@ -146,7 +126,7 @@
       The bank statement end date should be within <strong>31 days</strong> of the visa application date.
     </div>
 
-    <p class="hint" id="rateHint">Loading official rates...</p>
+    <div class="rate-panel" id="ratePanel">Loading official rates...</div>
 <details class="fxpanel" id="fxPanel">
   <summary>FX settings (only use if live FX fails)</summary>
   <div class="notice warn" id="fxFallbackNote" style="display:none;margin-top:10px">
@@ -305,7 +285,7 @@
 
 <footer class="wrap muted small" id="brandFooter">
   <p>Internal guidance tool. Always cross-check with latest GOV.UK requirements before filing.</p>
-  <p>Help: gsakhare@kcoverseas.com (Gaurav Sakhare | Senior Lead Operation)</p>
+  <p>For any issue/difficulty: Gaurav Mohan Sakhare, Senior Lead (Operation - UK Team) - gsakhare@kcoverseas.com</p>
 </footer>
 
 <script src="/app.js"></script>

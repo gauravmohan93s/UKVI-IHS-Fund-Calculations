@@ -37,6 +37,7 @@ const els = {
   dependants: $("dependants"),
   buffer: $("buffer"),
   rateHint: $("rateHint"),
+  ratePanel: $("ratePanel"),
 
   addRow: $("addRow"),
   clearRows: $("clearRows"),
@@ -76,6 +77,7 @@ let CONFIG = null;
 let SELECTED_REGION = "outside_london";
 let CURRENT_STUDENT = null;
 let CURRENT_COUNSELOR = null;
+let QUOTE_MANUAL = false;
 const currencyLocale = (cur) => {
   const c = String(cur || "").toUpperCase();
   if (c === "INR") return "en-IN";
@@ -134,6 +136,21 @@ function applyBranding(){
 
 function normalizeRegionLabel(r){
   return (r === "london") ? "London" : "Outside London";
+}
+
+function formatDateDisplay(value){
+  if (!value) return "-";
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return "-";
+  return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function applyCountryCurrency(country){
+  if (!country || QUOTE_MANUAL) return;
+  const map = CONFIG?.country_currency || {};
+  const cur = map[country];
+  if (!cur) return;
+  if (els.quote) els.quote.value = cur;
 }
 
 function setUniversityByName(name){
@@ -236,6 +253,7 @@ async function applyStudent(item){
     const cc = [item.city, item.country].filter(Boolean).join(", ");
     els.studentCityCountry.value = cc;
   }
+  if (item.country) applyCountryCurrency(item.country);
 
   if (item.university){
     const ok = setUniversityByName(item.university);
@@ -375,11 +393,41 @@ async function loadConfig(){
   // rate hint
   const s = CONFIG.routes.student;
   const cs = CONFIG.routes.child_16_17_independent;
-  els.rateHint.textContent =
-    `Student: London GBP ${s.maintenance_monthly_gbp.london}/mo, Outside GBP ${s.maintenance_monthly_gbp.outside_london}/mo; ` +
-    `Dependants: London GBP ${s.dependant_monthly_gbp.london}/mo, Outside GBP ${s.dependant_monthly_gbp.outside_london}/mo; cap ${s.max_months} months. ` +
-    `Child (16-17 independent): London GBP ${cs.maintenance_monthly_gbp.london}/mo, Outside GBP ${cs.maintenance_monthly_gbp.outside_london}/mo; cap ${cs.max_months} months. ` +
-    `IHS student rate: GBP ${CONFIG.ihs.student_yearly_gbp}/year (half-year GBP ${CONFIG.ihs.half_year_gbp}).`;
+  if (els.ratePanel) {
+    els.ratePanel.innerHTML = `
+      <div class="rate-card">
+        <div class="rate-title">Student maintenance</div>
+        <div class="rate-list">
+          <div><span class="rate-strong">London:</span> ${fmtMoney("GBP", s.maintenance_monthly_gbp.london)}/month</div>
+          <div><span class="rate-strong">Outside:</span> ${fmtMoney("GBP", s.maintenance_monthly_gbp.outside_london)}/month</div>
+          <div><span class="rate-strong">Cap:</span> ${s.max_months} months</div>
+        </div>
+      </div>
+      <div class="rate-card">
+        <div class="rate-title">Dependants maintenance</div>
+        <div class="rate-list">
+          <div><span class="rate-strong">London:</span> ${fmtMoney("GBP", s.dependant_monthly_gbp.london)}/month</div>
+          <div><span class="rate-strong">Outside:</span> ${fmtMoney("GBP", s.dependant_monthly_gbp.outside_london)}/month</div>
+          <div><span class="rate-strong">Cap:</span> ${s.max_months} months</div>
+        </div>
+      </div>
+      <div class="rate-card">
+        <div class="rate-title">Child (16–17 independent)</div>
+        <div class="rate-list">
+          <div><span class="rate-strong">London:</span> ${fmtMoney("GBP", cs.maintenance_monthly_gbp.london)}/month</div>
+          <div><span class="rate-strong">Outside:</span> ${fmtMoney("GBP", cs.maintenance_monthly_gbp.outside_london)}/month</div>
+          <div><span class="rate-strong">Cap:</span> ${cs.max_months} months</div>
+        </div>
+      </div>
+      <div class="rate-card">
+        <div class="rate-title">IHS rate</div>
+        <div class="rate-list">
+          <div><span class="rate-strong">Yearly:</span> ${fmtMoney("GBP", CONFIG.ihs.student_yearly_gbp)}</div>
+          <div><span class="rate-strong">Half‑year:</span> ${fmtMoney("GBP", CONFIG.ihs.half_year_gbp)}</div>
+        </div>
+      </div>
+    `;
+  }
 
   els.sourcesNote.textContent = `Rates sourced from GOV.UK guidance (configured server-side). FX via frankfurter.app.`;
 }
@@ -391,6 +439,10 @@ els.universitySelect.addEventListener("change", () => {
   SELECTED_REGION = (region === "london") ? "london" : "outside_london";
   els.regionDisplay.value = (SELECTED_REGION === "london") ? "London" : "Outside London";
 });
+
+if (els.quote) {
+  els.quote.addEventListener("change", () => { QUOTE_MANUAL = true; });
+}
 
 function getFundsRows(){
   const rows = [];
@@ -639,7 +691,7 @@ function buildIhsCalc(ihs){
   const persons = ihs.persons ? `; x ${ihs.persons} person${ihs.persons > 1 ? "s" : ""}` : "";
   const visaDate = ihs.visaEndDate ? new Date(ihs.visaEndDate) : null;
   const visaLabel = visaDate && !Number.isNaN(visaDate.getTime())
-    ? visaDate.toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" })
+    ? formatDateDisplay(visaDate)
     : (ihs.visaEndDate || "-");
   return `Visa end: ${visaLabel} (${ihs.totalStayMonths} months), ${perPerson}${persons}`;
 }
@@ -791,6 +843,7 @@ function resetAll(){
   SELECTED_REGION = "outside_london";
   els.regionDisplay.value = "Outside London";
   els.quote.value = "INR";
+  QUOTE_MANUAL = false;
   CURRENT_STUDENT = null;
   CURRENT_COUNSELOR = null;
 
@@ -842,7 +895,7 @@ els.btnCalc.addEventListener("click", calculate);
 els.btnPdf.addEventListener("click", downloadPdf);
 els.btnReset.addEventListener("click", resetAll);
 
-loadConfig().then(()=>{ els.regionDisplay.value = "Outside London"; }).catch(()=> { els.rateHint.textContent = "Could not load configuration."; });
+loadConfig().then(()=>{ els.regionDisplay.value = "Outside London"; }).catch(()=> { if (els.ratePanel) els.ratePanel.textContent = "Could not load configuration."; });
 
 async function apiFetch(url, opts = {}) {
   const code = localStorage.getItem("kc_access_code") || "";
