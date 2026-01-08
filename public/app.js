@@ -195,11 +195,16 @@ function initUniversitySearch(){
 }
 
 let studentSuggestMap = new Map();
+const studentCache = new Map();
+let studentSearchTimer = null;
 async function searchStudents(query){
   const q = String(query || "").trim();
   if (q.length < 2) return [];
+  if (studentCache.has(q)) return studentCache.get(q);
   const out = await apiFetch(`/api/students?q=${encodeURIComponent(q)}`).then(r=>r.json());
-  return Array.isArray(out.items) ? out.items : [];
+  const items = Array.isArray(out.items) ? out.items : [];
+  studentCache.set(q, items);
+  return items;
 }
 
 function renderStudentSuggest(items){
@@ -250,15 +255,18 @@ async function applyStudent(item){
 
 function initStudentSearch(){
   if (!els.studentAck) return;
-  els.studentAck.addEventListener("input", async () => {
+  els.studentAck.addEventListener("input", () => {
     CURRENT_STUDENT = null;
     if (els.studentName) els.studentName.value = "";
     if (els.studentProgram) els.studentProgram.value = "";
     if (els.studentStatus) els.studentStatus.value = "";
     if (els.studentIntakeYear) els.studentIntakeYear.value = "";
     if (els.studentCityCountry) els.studentCityCountry.value = "";
-    const items = await searchStudents(els.studentAck.value);
-    renderStudentSuggest(items);
+    if (studentSearchTimer) clearTimeout(studentSearchTimer);
+    studentSearchTimer = setTimeout(async () => {
+      const items = await searchStudents(els.studentAck.value);
+      renderStudentSuggest(items);
+    }, 250);
   });
   els.studentAck.addEventListener("focus", async () => {
     const items = await searchStudents(els.studentAck.value);
@@ -629,7 +637,11 @@ function buildIhsCalc(ihs){
   if (ihs.halfYearCharges > 0) parts.push(`${fmtMoney("GBP", ihs.rateHalfGbp)} x ${ihs.halfYearCharges} half-year${ihs.halfYearCharges > 1 ? "s" : ""}`);
   const perPerson = parts.length ? `${parts.join(" + ")} = ${fmtMoney("GBP", ihs.ihsPerPersonGbp)} per person` : "No IHS";
   const persons = ihs.persons ? `; x ${ihs.persons} person${ihs.persons > 1 ? "s" : ""}` : "";
-  return `Visa end: ${ihs.visaEndDate || "-"}; stay: ${ihs.totalStayMonths} months (${ihs.chargeableUnits} x 6-month). ${perPerson}${persons}`;
+  const visaDate = ihs.visaEndDate ? new Date(ihs.visaEndDate) : null;
+  const visaLabel = visaDate && !Number.isNaN(visaDate.getTime())
+    ? visaDate.toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" })
+    : (ihs.visaEndDate || "-");
+  return `Visa end: ${visaLabel} (${ihs.totalStayMonths} months), ${perPerson}${persons}`;
 }
 
 async function calculate(){

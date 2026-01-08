@@ -88,6 +88,8 @@ function loadStudents() {
       university: normalizeStr(n.university),
       status: normalizeStr(n.status),
       intakeYear: normalizeStr(
+        n.intake ||
+        n["intake"] ||
         n["intake inyear"] ||
         n["intake - inyear"] ||
         n["intake in year"] ||
@@ -739,11 +741,15 @@ app.post("/api/pdf", async (req, res) => {
       if (!ensureSpace(boxH + 6)) return;
       doc.roundedRect(margin, y, pageWidth, boxH, 10).fill(ok ? "#dcfce7" : "#fee2e2");
       doc.fillColor(ok ? "#065f46" : "#7f1d1d").fontSize(11)
-        .text(ok ? "Result: ELIGIBLE (Funds are sufficient)" : "Result: NOT ELIGIBLE (Funds are short)", margin + 10, y + 8, { width: pageWidth - 20 });
+        .text(ok ? "Result: ELIGIBLE (Funds are sufficient)" : "Result: NOT ELIGIBLE (Funds are short)", margin + 10, y + 6, { width: pageWidth - 20 });
+
+      const colW = (pageWidth - 20) / 2;
+      const leftX = margin + 10;
+      const rightX = margin + 10 + colW;
       doc.fillColor("#0f172a").fontSize(9)
-        .text(`Required: ${fmtGBP(fundsReq.fundsRequiredGbp)} (${fmtQuote(fundsReq.fundsRequiredGbp)})`, margin + 10, y + 24, { width: pageWidth - 20 });
+        .text(`Required: ${fmtGBP(fundsReq.fundsRequiredGbp)} (${fmtQuote(fundsReq.fundsRequiredGbp)})`, leftX, y + 24, { width: colW - 6 });
       doc.fillColor("#0f172a").fontSize(9)
-        .text(`Eligible available: ${fmtGBP(fundsAvail.summary.totalEligibleGbp)} (${fmtQuote(fundsAvail.summary.totalEligibleGbp)})`, margin + 10, y + 34, { width: pageWidth - 20 });
+        .text(`Eligible available: ${fmtGBP(fundsAvail.summary.totalEligibleGbp)} (${fmtQuote(fundsAvail.summary.totalEligibleGbp)})`, rightX, y + 24, { width: colW - 6 });
       y += boxH + 8;
       doc.fillColor("#000000");
     };
@@ -778,11 +784,43 @@ app.post("/api/pdf", async (req, res) => {
         const label = String(row.label ?? "-");
         const value = String(row.value ?? "-");
         doc.fontSize(7).fillColor("#64748b").text(label, x + paddingX, ry, { width: labelW });
-        doc.fontSize(9).fillColor("#0f172a").text(value, x + paddingX + labelW, ry, { width: valueW, align: "right" });
+        doc.fontSize(9).fillColor(row.valueColor || "#0f172a").text(value, x + paddingX + labelW, ry, { width: valueW, align: "right" });
         const lh = doc.heightOfString(label, { width: labelW });
         const vh = doc.heightOfString(value, { width: valueW, align: "right" });
         ry += Math.max(lh, vh) + 4;
       });
+    };
+
+    const drawTwoColBox = (x, boxY, w, title, rows) => {
+      const headerH = 18;
+      const paddingX = 10;
+      const colGap = 12;
+      const colW = (w - paddingX * 2 - colGap) / 2;
+      let height = headerH + 6;
+      rows.forEach((r) => {
+        const leftText = `${r.leftLabel}: ${r.leftValue || "-"}`;
+        const rightText = `${r.rightLabel}: ${r.rightValue || "-"}`;
+        const lh = doc.heightOfString(leftText, { width: colW });
+        const rh = doc.heightOfString(rightText, { width: colW });
+        height += Math.max(lh, rh) + 4;
+      });
+
+      doc.roundedRect(x, boxY, w, height, 8).fill("#f8fafc");
+      doc.strokeColor("#e2e8f0").lineWidth(1).roundedRect(x, boxY, w, height, 8).stroke();
+      doc.fillColor("#0f172a").fontSize(10).text(title, x + 10, boxY + 6);
+
+      let ry = boxY + headerH;
+      rows.forEach((r) => {
+        const leftText = `${r.leftLabel}: ${r.leftValue || "-"}`;
+        const rightText = `${r.rightLabel}: ${r.rightValue || "-"}`;
+        doc.fontSize(8).fillColor("#0f172a").text(leftText, x + paddingX, ry, { width: colW });
+        doc.text(rightText, x + paddingX + colW + colGap, ry, { width: colW });
+        const lh = doc.heightOfString(leftText, { width: colW });
+        const rh = doc.heightOfString(rightText, { width: colW });
+        ry += Math.max(lh, rh) + 4;
+      });
+
+      return height;
     };
 
     const drawFundsTable = (rows) => {
@@ -873,16 +911,11 @@ app.post("/api/pdf", async (req, res) => {
     }
 
     const counselorRows = [
-      { label: "Name", value: payload.counselorName || "-" },
-      { label: "Email", value: payload.counselorEmail || "-" },
-      { label: "Region/Sub", value: [payload.counselorRegion, payload.counselorSubRegion].filter(Boolean).join(" / ") || "-" },
-      { label: "Role", value: [payload.counselorDesignation, payload.counselorRoles].filter(Boolean).join(" / ") || "-" },
+      { leftLabel: "Name", leftValue: payload.counselorName || "-", rightLabel: "Email", rightValue: payload.counselorEmail || "-" },
+      { leftLabel: "Role", leftValue: [payload.counselorDesignation, payload.counselorRoles].filter(Boolean).join(" / ") || "-", rightLabel: "Region/Sub", rightValue: [payload.counselorRegion, payload.counselorSubRegion].filter(Boolean).join(" / ") || "-" },
     ];
-    const counselorH = measureKeyValueBoxHeight(counselorRows, pageWidth, 0.42);
-    if (ensureSpace(counselorH)) {
-      drawKeyValueBox(margin, y, pageWidth, counselorH, "Counselor details", counselorRows, 0.42);
-      y += counselorH + 8;
-    }
+    const counselorH = drawTwoColBox(margin, y, pageWidth, "Counselor details", counselorRows);
+    y += counselorH + 8;
 
     const ihsParts = [];
     if (ihs.yearlyCharges > 0) ihsParts.push(`${fmtGBP(ihs.rateYearlyGbp)} x ${ihs.yearlyCharges} year${ihs.yearlyCharges > 1 ? "s" : ""}`);
@@ -897,7 +930,6 @@ app.post("/api/pdf", async (req, res) => {
       { label: "Buffer", value: `${fmtGBP(safeNum(payload.bufferGbp))} (${fmtQuote(safeNum(payload.bufferGbp))})` },
       { label: "Visa end date", value: ihs.visaEndDate || "-" },
       { label: "Total stay", value: `${ihs.totalStayMonths} months (${ihs.totalStayDays} days)` },
-      { label: "Chargeable units", value: `${ihs.chargeableUnits} x 6-month` },
       { label: "IHS calculation", value: ihsCalcText },
       { label: "IHS total", value: `${fmtGBP(ihs.ihsTotalGbp)} (${fmtQuote(ihs.ihsTotalGbp)})` },
     ];
@@ -923,7 +955,7 @@ app.post("/api/pdf", async (req, res) => {
     const totalsRows = [
       { label: "Total required", value: `${fmtGBP(fundsReq.fundsRequiredGbp)} (${fmtQuote(fundsReq.fundsRequiredGbp)})` },
       { label: "Eligible funds", value: `${fmtGBP(fundsAvail.summary.totalEligibleGbp)} (${fmtQuote(fundsAvail.summary.totalEligibleGbp)})` },
-      { label: gapLabel, value: `${gapValue}${gapValueQuote}` },
+      { label: gapLabel, value: `${gapValue}${gapValueQuote}`, valueColor: gapEligible >= 0 ? "#166534" : "#b91c1c" },
     ];
     const totalsH = measureKeyValueBoxHeight(totalsRows, pageWidth, 0.5);
     if (ensureSpace(totalsH)) {
@@ -962,6 +994,10 @@ app.post("/api/pdf", async (req, res) => {
           y += noteH + 6;
         }
       } else {
+        if (ensureSpace(14)) {
+          doc.fillColor("#0f172a").fontSize(10).text("Funds available (details)", margin, y);
+          y += 12;
+        }
         drawFundsTable(fundsAvail.rows);
         y += 6;
       }

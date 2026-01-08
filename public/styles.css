@@ -211,6 +211,25 @@ button:disabled{opacity:.6;cursor:not-allowed}
   background:linear-gradient(135deg, rgba(34,108,245,.10) 0%, rgba(89,144,247,.10) 100%);
 }
 .table-wrap{overflow-x:auto}
+.table-wide{min-width:1200px}
+#fundsTable th:nth-child(1){min-width:160px}
+#fundsTable th:nth-child(2){min-width:140px}
+#fundsTable th:nth-child(3){min-width:220px}
+#fundsTable th:nth-child(4){min-width:160px}
+#fundsTable th:nth-child(5){min-width:170px}
+#fundsTable th:nth-child(6){min-width:150px}
+#fundsTable th:nth-child(7){min-width:150px}
+#fundsTable th:nth-child(8){min-width:150px}
+#fundsTable th:nth-child(9){min-width:190px}
+#fundsAvailBreak th:nth-child(1){min-width:100px}
+#fundsAvailBreak th:nth-child(2){min-width:140px}
+#fundsAvailBreak th:nth-child(3){min-width:120px}
+#fundsAvailBreak th:nth-child(4){min-width:200px}
+#fundsAvailBreak th:nth-child(5){min-width:160px}
+#fundsAvailBreak th:nth-child(6){min-width:120px}
+#fundsAvailBreak th:nth-child(7){min-width:140px}
+#fundsAvailBreak th:nth-child(8){min-width:180px}
+#fundsAvailBreak th:nth-child(9){min-width:200px}
 .muted-field{background:#f8fafc;color:#94a3b8}
 .suggest .title{font-weight:800}
 .suggest .sub{font-size:12px;color:var(--muted);margin-top:2px}
