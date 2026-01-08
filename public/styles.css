@@ -57,6 +57,7 @@ h3{margin:14px 0 8px;font-size:15px;color:var(--muted)}
 }
 @media(max-width:920px){.form-grid{grid-template-columns:1fr}}
 label{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--muted)}
+label.toggle{flex-direction:row;align-items:center}
 input,select{
   width:100%;
   border-radius:12px;
