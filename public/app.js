@@ -52,6 +52,8 @@ const els = {
   ihsGbp: $("ihsGbp"),
   ihsCalc: $("ihsCalc"),
   ihsFx: $("ihsFx"),
+  ihsQuickGbp: $("ihsQuickGbp"),
+  ihsQuickCalc: $("ihsQuickCalc"),
   fundsReqGbp: $("fundsReqGbp"),
   fundsReqFx: $("fundsReqFx"),
   fundsAvailGbp: $("fundsAvailGbp"),
@@ -151,6 +153,36 @@ function applyCountryCurrency(country){
   const cur = map[country];
   if (!cur) return;
   if (els.quote) els.quote.value = cur;
+}
+
+function setDefaultBuffer(){
+  const def = Number(CONFIG?.fees?.default_buffer_gbp || 500);
+  if (els.buffer) els.buffer.value = Number.isFinite(def) ? def : 500;
+}
+
+function getTodayISO(){
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
+  const y = parts.find(p => p.type === "year")?.value || "0000";
+  const m = parts.find(p => p.type === "month")?.value || "01";
+  const d = parts.find(p => p.type === "day")?.value || "01";
+  return `${y}-${m}-${d}`;
+}
+
+function setApplicationDate(value){
+  if (!els.applicationDate) return;
+  els.applicationDate.value = value;
+}
+
+function applyDatePreset(kind){
+  if (kind === "today") return setApplicationDate(getTodayISO());
+  const cs = els.courseStart?.value;
+  if (!cs) return;
+  const base = new Date(cs);
+  if (Number.isNaN(base.getTime())) return;
+  const days = Number(kind.replace("cs-", "")) || 0;
+  const d = new Date(base);
+  d.setDate(d.getDate() - days);
+  setApplicationDate(d.toISOString().slice(0, 10));
 }
 
 function setUniversityByName(name){
@@ -272,6 +304,11 @@ async function applyStudent(item){
     els.studentCityCountry.value = cc;
   }
   if (item.country) applyCountryCurrency(item.country);
+  if (els.tuitionTotal) {
+    const current = Number(els.tuitionTotal.value || 0);
+    const incoming = Number(item.tuitionFeeTotalGbp || 0);
+    if (!current && incoming) els.tuitionTotal.value = incoming;
+  }
 
   if (item.university){
     const ok = setUniversityByName(item.university);
@@ -399,6 +436,7 @@ async function loadConfig(){
   const out = await apiFetch("/api/config").then(r=>r.json());
   CONFIG = out.config;
   applyBranding();
+  setDefaultBuffer();
   initUniversitySearch();
   // universities dropdown
   for (const u of (CONFIG.universities || [])){
@@ -415,23 +453,26 @@ async function loadConfig(){
   const cs = CONFIG.routes.child_16_17_independent;
   if (els.ratePanel) {
     els.ratePanel.innerHTML = `
-      <div class="rate-card">
-        <div class="rate-title">Maintenance rates (per month)</div>
-        <div class="rate-list">
-          <div><span class="rate-strong">Student (London):</span> ${fmtMoney("GBP", s.maintenance_monthly_gbp.london)}</div>
-          <div><span class="rate-strong">Student (Outside):</span> ${fmtMoney("GBP", s.maintenance_monthly_gbp.outside_london)}</div>
-          <div><span class="rate-strong">Dependants (London):</span> ${fmtMoney("GBP", s.dependant_monthly_gbp.london)}</div>
-          <div><span class="rate-strong">Dependants (Outside):</span> ${fmtMoney("GBP", s.dependant_monthly_gbp.outside_london)}</div>
-          <div><span class="rate-strong">Child 16–17 (London):</span> ${fmtMoney("GBP", cs.maintenance_monthly_gbp.london)}</div>
-          <div><span class="rate-strong">Child 16–17 (Outside):</span> ${fmtMoney("GBP", cs.maintenance_monthly_gbp.outside_london)}</div>
-          <div><span class="rate-strong">Cap:</span> ${s.max_months} months</div>
-        </div>
+      <div class="rate-card wide">
+        <div class="rate-title">Maintenance rates (GBP / month)</div>
+        <table class="rate-table">
+          <thead>
+            <tr><th>Category</th><th>London</th><th>Outside London</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Student</td><td>${fmtMoney("GBP", s.maintenance_monthly_gbp.london)}</td><td>${fmtMoney("GBP", s.maintenance_monthly_gbp.outside_london)}</td></tr>
+            <tr><td>Dependants</td><td>${fmtMoney("GBP", s.dependant_monthly_gbp.london)}</td><td>${fmtMoney("GBP", s.dependant_monthly_gbp.outside_london)}</td></tr>
+            <tr><td>Child 16–17 (independent)</td><td>${fmtMoney("GBP", cs.maintenance_monthly_gbp.london)}</td><td>${fmtMoney("GBP", cs.maintenance_monthly_gbp.outside_london)}</td></tr>
+          </tbody>
+        </table>
+        <div class="rate-meta">Cap: ${s.max_months} months</div>
       </div>
       <div class="rate-card">
         <div class="rate-title">IHS rate</div>
         <div class="rate-list">
           <div><span class="rate-strong">Yearly:</span> ${fmtMoney("GBP", CONFIG.ihs.student_yearly_gbp)}</div>
           <div><span class="rate-strong">Half‑year:</span> ${fmtMoney("GBP", CONFIG.ihs.half_year_gbp)}</div>
+          <div><span class="rate-strong">Visa application fee:</span> ${fmtMoney("GBP", CONFIG.fees?.visa_application_fee_gbp || 0)}</div>
         </div>
       </div>
     `;
@@ -600,7 +641,8 @@ function payload(){
     region: SELECTED_REGION,
     courseStart: els.courseStart.value,
     courseEnd: els.courseEnd.value,
-    applicationDate: els.applicationDate.value || null,
+    applicationDate: els.applicationDate.value || getTodayISO(),
+    applicationDateDefaulted: !els.applicationDate.value,
 
     studentAckNumber: (els.studentAck && els.studentAck.value) || (CURRENT_STUDENT && CURRENT_STUDENT.ackNumber) || "",
     studentName: (els.studentName && els.studentName.value) || (CURRENT_STUDENT && CURRENT_STUDENT.studentName) || "",
@@ -672,9 +714,7 @@ function validateTab(tabId){
       if (sd > ed) { errs.push("Course end date must be after start date."); markField(els.courseEnd, true); }
     }
 
-    const appOk = Boolean(els.applicationDate.value);
-    if (!appOk) errs.push("Enter visa application date (required).");
-    markField(els.applicationDate, !appOk);
+    // application date optional (defaults to today)
   }
   if (tabId === "t2"){
     // Fees can be 0 but must be numbers; no mandatory besides dependants default 0
@@ -692,7 +732,6 @@ function validateCore(){
   if (!els.universitySelect.value) return "Please choose a university from the suggestions.";
   if (!els.courseStart.value || !els.courseEnd.value) return "Please enter course start and end dates.";
   if (new Date(els.courseEnd.value) <= new Date(els.courseStart.value)) return "Course end date must be after the start date.";
-  if (!els.applicationDate.value) return "Please enter visa application date (mandatory).";
   return null;
 }
 
@@ -710,11 +749,28 @@ function buildIhsCalc(ihs){
   return `Visa end: ${visaLabel} (${ihs.totalStayMonths} months), ${perPerson}${persons}`;
 }
 
+async function updateIhsQuick(){
+  if (!els.courseStart?.value || !els.courseEnd?.value) {
+    if (els.ihsQuickGbp) els.ihsQuickGbp.textContent = "-";
+    if (els.ihsQuickCalc) els.ihsQuickCalc.textContent = "-";
+    return;
+  }
+  const res = await apiFetch("/api/ihs", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ courseStart: els.courseStart.value, courseEnd: els.courseEnd.value })
+  }).then(r => r.json());
+  if (res.error) return;
+  if (els.ihsQuickGbp) els.ihsQuickGbp.textContent = fmtMoney("GBP", res.ihs.ihsTotalGbp);
+  if (els.ihsQuickCalc) els.ihsQuickCalc.textContent = buildIhsCalc(res.ihs);
+}
+
 async function calculate(){
   const err = validateCore();
   if (err) { alert(err); return; }
 
-  const out = await apiFetch("/api/report", { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify(payload()) }).then(r=>r.json());
+  const body = payload();
+  const out = await apiFetch("/api/report", { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify(body) }).then(r=>r.json());
   if (out.error) { alert(out.error); return; }
 
   const quote = els.quote.value;
@@ -787,6 +843,7 @@ async function calculate(){
   const s = out.fundsAvailable.summary;
   const warns = [];
   if (s.skipped) warns.push("Funds section skipped - available funds treated as GBP 0.");
+  if (body.applicationDateDefaulted) warns.push("Application date defaulted to today.");
   if (!s.hasApplicationDate) warns.push("Application date not provided - freshness checks are NOT verified.");
   warns.push("31-day statement freshness is checked only for bank statements when the visa application date is entered.");
   if (s.anyRowMissingDates) warns.push("Some fund rows are missing required dates - those rows are treated as NOT eligible.");
@@ -819,6 +876,7 @@ async function calculate(){
     `<strong>Bank statements:</strong> Funds must be held for <strong>${out.rules.funds_hold_days} consecutive days</strong> and end within <strong>${out.rules.statement_age_days} days</strong> of the visa application date. ` +
     `<strong>FDs:</strong> Maturity date is required (28/31-day rule does not apply). ` +
     `<strong>Education loans:</strong> Disbursement letter should be within <strong>${out.rules.loan_letter_max_age_days || 180} days</strong> of application. ` +
+    `Visa application date defaults to today if not provided. ` +
     `Maintenance months cap applied: <strong>${out.fundsRequired.monthsRequired}</strong>.`;
 }
 
@@ -866,7 +924,7 @@ function resetAll(){
   els.tuitionPaid.value = 0;
   els.scholarship.value = 0;
   els.dependants.value = 0;
-  els.buffer.value = 0;
+  setDefaultBuffer();
 
   // Funds rows
   els.fundsTbody.innerHTML = "";
@@ -908,6 +966,13 @@ function resetAll(){
 els.btnCalc.addEventListener("click", calculate);
 els.btnPdf.addEventListener("click", downloadPdf);
 els.btnReset.addEventListener("click", resetAll);
+
+if (els.courseStart) els.courseStart.addEventListener("change", updateIhsQuick);
+if (els.courseEnd) els.courseEnd.addEventListener("change", updateIhsQuick);
+
+document.querySelectorAll("[data-date]").forEach((btn) => {
+  btn.addEventListener("click", () => applyDatePreset(btn.getAttribute("data-date") || ""));
+});
 
 loadConfig().then(()=>{ els.regionDisplay.value = "Outside London"; }).catch(()=> { if (els.ratePanel) els.ratePanel.textContent = "Could not load configuration."; });
 
@@ -952,6 +1017,7 @@ initAccessCode();
 initStudentSearch();
 initCounselorSearch();
 toggleFundsSkip();
+updateIhsQuick();
 
 
 // Step navigation guard

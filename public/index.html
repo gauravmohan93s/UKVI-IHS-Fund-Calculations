@@ -46,11 +46,28 @@
   </div>
 
   <section class="card tabpane active" id="t1">
-    <h2>Course details (Inputs)</h2>
-    <p class="muted small">
-      Enter only the fields below. Study location is mapped automatically from the selected university.
-    </p>
+    <h2>IHS calculation (Course dates)</h2>
+    <p class="muted small">Enter course dates to get the IHS calculation immediately. These dates also drive the full calculation later.</p>
 
+    <div class="ihs-quick">
+      <div class="form-grid">
+        <label>Course start date (as per CAS)
+          <input id="courseStart" type="date"/>
+        </label>
+        <label>Course end date (as per CAS)
+          <input id="courseEnd" type="date"/>
+        </label>
+      </div>
+      <div class="ihs-quick-result">
+        <div class="kpi">
+          <div class="kpi-label">IHS Total (Quick)</div>
+          <div class="kpi-value" id="ihsQuickGbp">-</div>
+          <div class="kpi-sub" id="ihsQuickCalc">-</div>
+        </div>
+      </div>
+    </div>
+
+    <h3>Application details (auto)</h3>
     <div class="form-grid">
 
       <label>Student acknowledgement number (search)
@@ -90,17 +107,15 @@
         <input id="regionDisplay" type="text" value="Outside London" readonly/>
       </label>
 
-      <label>Course start date (as per CAS)
-        <input id="courseStart" type="date"/>
-      </label>
-
-      <label>Course end date (as per CAS)
-        <input id="courseEnd" type="date"/>
-      </label>
-
-      <label>Visa application date (mandatory)
+      <label>Visa application date (optional)
         <input id="applicationDate" type="date"/>
-        <div class="helper">Used to validate the 31-day statement freshness rule.</div>
+        <div class="helper">Defaults to today if left empty.</div>
+        <div class="date-presets">
+          <button type="button" class="secondary" data-date="today">Today</button>
+          <button type="button" class="secondary" data-date="cs-10">10 days before course start</button>
+          <button type="button" class="secondary" data-date="cs-20">20 days before course start</button>
+          <button type="button" class="secondary" data-date="cs-30">30 days before course start</button>
+        </div>
       </label>
 
       <label>Display currency (for sharing with student/parents)
@@ -164,7 +179,7 @@
       </label>
 
       <label>Buffer amount - GBP (optional)
-        <input id="buffer" type="number" min="0" step="0.01" value="0"/>
+        <input id="buffer" type="number" min="0" step="0.01" value="500"/>
       </label>
     </div>
 

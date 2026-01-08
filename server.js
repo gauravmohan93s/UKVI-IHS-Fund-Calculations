@@ -104,6 +104,17 @@ function loadStudents() {
         n.intakeinyear ||
         n.intakeyear
       ),
+      tuitionFeeTotalGbp: normalizeStr(
+        n["tuition fee"] ||
+        n["tuition fee gbp"] ||
+        n["tuition fee total"] ||
+        n["tuitionfeetotal"] ||
+        n["course fee"] ||
+        n["course fee gbp"] ||
+        n["coursefee"] ||
+        n["total fee"] ||
+        n["total fee gbp"]
+      ),
       applicationStageChangedOn: normalizeStr(n.applicationstagechangedon),
       assignee: normalizeStr(n.assignee),
       assigneeEmail: normalizeStr(n.assigneeemail),
@@ -243,6 +254,14 @@ function datedifMonths(startDate, endDate){
 function formatDateISO(d){
   if (!d || Number.isNaN(d.getTime())) return "";
   return d.toISOString().slice(0, 10);
+}
+
+function todayISOInIST(){
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
+  const y = parts.find(p => p.type === "year")?.value || "0000";
+  const m = parts.find(p => p.type === "month")?.value || "01";
+  const d = parts.find(p => p.type === "day")?.value || "01";
+  return `${y}-${m}-${d}`;
 }
 
 const dateFormatter = new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
@@ -559,6 +578,7 @@ app.get("/api/config", async (req, res) => {
       routes: { ...local.routes, ...(remote.routes || {}) },
       rules: { ...local.rules, ...(remote.rules || {}) },
       ihs: { ...local.ihs, ...(remote.ihs || {}) },
+      fees: { ...local.fees, ...(remote.fees || {}) },
       fx: { ...local.fx, ...(remote.fx || {}) },
       universities: remote.universities || local.universities,
       country_currency: { ...(local.country_currency || {}), ...(remote.country_currency || {}), ...countryCurrency }
@@ -610,12 +630,29 @@ app.get("/api/fx", async (req, res) => {
   }
 });
 
+app.post("/api/ihs", (req, res) => {
+  try {
+    const config = readLocalConfig();
+    const payload = req.body || {};
+    if (!payload.courseStart || !payload.courseEnd) {
+      return res.status(400).json({ error: "courseStart and courseEnd required." });
+    }
+    const ihs = computeIhsBlock(payload, config, 0);
+    res.json({ ihs });
+  } catch (e) {
+    res.status(400).json({ error: String(e) });
+  }
+});
+
 app.post("/api/report", async (req, res) => {
   try {
     const config = readLocalConfig();
     const payload = req.body || {};
+    if (!payload.applicationDate) {
+      payload.applicationDate = todayISOInIST();
+      payload.applicationDateDefaulted = true;
+    }
     const pdfMode = String(payload.pdfMode || "internal");
-    if (!payload.applicationDate) return res.status(400).json({ error: "Visa application date is required." });
     const fundsReq = calcFundsRequired(payload, config);
     const fundsAvail = await calcFundsAvailable(payload, config.rules);
     const gapEligible = round2(fundsAvail.summary.totalEligibleGbp - fundsReq.fundsRequiredGbp);
@@ -641,8 +678,11 @@ app.post("/api/pdf", async (req, res) => {
   try {
     const config = readLocalConfig();
     const payload = req.body || {};
+    if (!payload.applicationDate) {
+      payload.applicationDate = todayISOInIST();
+      payload.applicationDateDefaulted = true;
+    }
     const pdfMode = String(payload.pdfMode || "internal");
-    if (!payload.applicationDate) return res.status(400).json({ error: "Visa application date is required." });
     const fundsReq = calcFundsRequired(payload, config);
     const fundsAvail = await calcFundsAvailable(payload, config.rules);
     const ihs = computeIhsBlock(payload, config, fundsReq.dependantsCountEffective);
@@ -967,11 +1007,13 @@ app.post("/api/pdf", async (req, res) => {
     const ihsCalcText = ihsParts.length ? `${ihsParts.join(" + ")} = ${fmtGBP(ihs.ihsPerPersonGbp)} per person` : "No IHS";
 
     const rowTop2 = y;
+    const visaFeeGbp = safeNum(config.fees?.visa_application_fee_gbp);
     const feesRows = [
       { label: "Tuition total", value: `${fmtGBP(safeNum(payload.tuitionFeeTotalGbp))} (${fmtQuote(safeNum(payload.tuitionFeeTotalGbp))})` },
       { label: "Tuition paid", value: `${fmtGBP(safeNum(payload.tuitionFeePaidGbp))} (${fmtQuote(safeNum(payload.tuitionFeePaidGbp))})` },
       { label: "Scholarship", value: `${fmtGBP(safeNum(payload.scholarshipGbp))} (${fmtQuote(safeNum(payload.scholarshipGbp))})` },
       { label: "Buffer", value: `${fmtGBP(safeNum(payload.bufferGbp))} (${fmtQuote(safeNum(payload.bufferGbp))})` },
+      { label: "Visa application fee", value: `${fmtGBP(visaFeeGbp)} (${fmtQuote(visaFeeGbp)})` },
       { label: "Visa end date", value: formatDateDisplay(ihs.visaEndDate) },
       { label: "Total stay", value: `${ihs.totalStayMonths} months (${ihs.totalStayDays} days)` },
       { label: "IHS calculation", value: ihsCalcText },
@@ -997,7 +1039,7 @@ app.post("/api/pdf", async (req, res) => {
     const totalsH = measureKeyValueBoxHeight(totalsRows, halfWidth, 0.5);
 
     if (ensureSpace(Math.max(feesH, fundsReqH + totalsH + 8))) {
-      drawKeyValueBox(margin, rowTop2, halfWidth, feesH, "Fees and IHS", feesRows, 0.5);
+      drawKeyValueBox(margin, rowTop2, halfWidth, feesH, "Fees, IHS & Visa fee", feesRows, 0.5);
       drawKeyValueBox(margin + halfWidth + colGap, rowTop2, halfWidth, fundsReqH, "Funds required (28-day)", fundsReqRows, 0.5);
       drawKeyValueBox(margin + halfWidth + colGap, rowTop2 + fundsReqH + 8, halfWidth, totalsH, "Totals", totalsRows, 0.5);
       y = rowTop2 + Math.max(feesH, fundsReqH + totalsH + 8) + 8;
@@ -1047,7 +1089,7 @@ app.post("/api/pdf", async (req, res) => {
       `Bank statements: funds must be held for ${config.rules.funds_hold_days} consecutive days and end within ${config.rules.statement_age_days} days of the visa application date. ` +
       `FDs: maturity date required (28/31-day checks not applied). ` +
       `Education loans: disbursement letter should be within ${config.rules.loan_letter_max_age_days ?? 180} days of the application. ` +
-      `Visa application date is required for freshness checks.`;
+      `Visa application date defaults to today if not provided.`;
     const rulesHeight = 22;
     if (y + rulesHeight > bottomLimit()) {
       y = bottomLimit() - rulesHeight;

@@ -39,6 +39,10 @@
     "half_year_gbp": 388,
     "other_yearly_gbp": 1035
   },
+  "fees": {
+    "visa_application_fee_gbp": 524,
+    "default_buffer_gbp": 500
+  },
   "fx": {
     "provider": "frankfurter.app",
     "default_quote": "INR"

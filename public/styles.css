@@ -81,10 +81,27 @@ input:focus,select:focus{border-color:rgba(122,162,255,.6)}
   border-radius:14px;
   padding:12px;
 }
+.rate-card.wide{grid-column:1/-1}
 .rate-title{font-weight:800;margin-bottom:6px}
 .rate-list{display:grid;gap:4px;color:var(--muted)}
 .rate-strong{color:var(--text);font-weight:700}
+.rate-table{width:100%;border-collapse:collapse;margin-top:6px}
+.rate-table th,.rate-table td{padding:6px 8px;border-bottom:1px solid var(--line);font-size:12px}
+.rate-table th{color:#475569;font-weight:700;text-align:left;background:rgba(15,23,42,.04)}
+.rate-table td{color:var(--text)}
+.rate-meta{margin-top:6px;color:var(--muted)}
 @media(max-width:920px){.rate-panel{grid-template-columns:1fr}}
+.ihs-quick{
+  display:grid;
+  grid-template-columns:2fr 1fr;
+  gap:12px;
+  align-items:start;
+  margin-bottom:12px;
+}
+.ihs-quick-result .kpi{margin:0}
+.date-presets{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.date-presets button.secondary{padding:6px 10px;font-size:12px}
+@media(max-width:920px){.ihs-quick{grid-template-columns:1fr}}
 
 .buttons{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px}
 button.primary{
