@@ -42,9 +42,10 @@ app.use((req, res, next) => {
 app.use(express.static(path.join(__dirname, "public")));
 
 const LOCAL_CONFIG_PATH = path.join(__dirname, "data", "ukvi_config.json");
-const CONFIG_URL = process.env.CONFIG_URL || ""; // optional remote JSON
+const CONFIG_URL = process.env.CONFIG_URL || ""; // optional remote JSON        
 const STUDENTS_XLSX_PATH = process.env.STUDENTS_XLSX_PATH || path.join(__dirname, "data", "students.xlsx");
 const COUNSELORS_CSV_PATH = process.env.COUNSELORS_CSV_PATH || path.join(__dirname, "data", "counselors.csv");
+const APP_VERSION = "2.3.0";
 
 function readLocalConfig() {
   return JSON.parse(fs.readFileSync(LOCAL_CONFIG_PATH, "utf-8"));
@@ -86,7 +87,15 @@ function loadStudents() {
       programName: normalizeStr(n.programname),
       university: normalizeStr(n.university),
       status: normalizeStr(n.status),
-      intakeYear: normalizeStr(n["intake inyear"] || n["intake - inyear"] || n.intakeinyear),
+      intakeYear: normalizeStr(
+        n["intake inyear"] ||
+        n["intake - inyear"] ||
+        n["intake in year"] ||
+        n["intake year"] ||
+        n["intake - in year"] ||
+        n.intakeinyear ||
+        n.intakeyear
+      ),
       applicationStageChangedOn: normalizeStr(n.applicationstagechangedon),
       assignee: normalizeStr(n.assignee),
       assigneeEmail: normalizeStr(n.assigneeemail),
@@ -200,6 +209,34 @@ function monthsForIHS(visaStart, visaEnd){
   return Math.max(0, Math.ceil(days / 30.44));
 }
 
+function addMonthsExcel(dateStr, months){
+  if (!dateStr) return null;
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return null;
+  const year = d.getFullYear();
+  const month = d.getMonth();
+  const day = d.getDate();
+  const target = new Date(year, month + Number(months || 0), 1);
+  const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+  target.setDate(Math.min(day, lastDay));
+  return target;
+}
+
+function datedifMonths(startDate, endDate){
+  if (!startDate || !endDate) return 0;
+  const s = new Date(startDate);
+  const e = new Date(endDate);
+  if (Number.isNaN(s.getTime()) || Number.isNaN(e.getTime())) return 0;
+  let months = (e.getFullYear() - s.getFullYear()) * 12 + (e.getMonth() - s.getMonth());
+  if (e.getDate() < s.getDate()) months -= 1;
+  return Math.max(0, months);
+}
+
+function formatDateISO(d){
+  if (!d || Number.isNaN(d.getTime())) return "";
+  return d.toISOString().slice(0, 10);
+}
+
 function calcIHSStudent(visaStart, visaEnd, ihsYearly, ihsHalf, applyingFrom="outside"){
   const months = monthsForIHS(visaStart, visaEnd);
   if (months <= 6) return applyingFrom === "outside" ? 0 : ihsHalf;
@@ -264,12 +301,32 @@ function calcFundsRequired(payload, config){
 }
 
 async function calcFundsAvailable(payload, rules){
-  // rows: [{accountType, source, currency, amount, statementStart, statementEnd}]
+  // rows: [{fundType, accountType, source, currency, amount, statementStart, statementEnd, fdMaturity, loanDisbursement}]
   const rows = Array.isArray(payload.fundsRows) ? payload.fundsRows : [];
   const applicationDate = payload.applicationDate ? new Date(payload.applicationDate) : null;
 
   const fundsHoldDays = Number(rules?.funds_hold_days ?? 28);
   const statementAgeDays = Number(rules?.statement_age_days ?? 31);
+  const loanLetterMaxAgeDays = Number(rules?.loan_letter_max_age_days ?? 180);
+  const skipFunds = Boolean(payload.fundsSkip);
+
+  if (skipFunds) {
+    return {
+      summary: {
+        totalAllGbp: 0,
+        totalEligibleGbp: 0,
+        fundsHoldDays,
+        statementAgeDays,
+        loanLetterMaxAgeDays,
+        hasApplicationDate: !!applicationDate,
+        anyRowMissingDates: false,
+        anyIneligibleRows: false,
+        skipped: true,
+        skipReason: "User marked funds as not held yet"
+      },
+      rows: []
+    };
+  }
 
   let totalAllGbp = 0;
   let totalEligibleGbp = 0;
@@ -292,13 +349,18 @@ async function calcFundsAvailable(payload, rules){
     return Math.floor(ms / 86400000);
   };
 
+  const isAppDateWarning = (msg) => msg && msg.startsWith("No application date");
+
   for (const r of rows) {
+    const fundType = String(r.fundType || "bank").toLowerCase();
     const accountType = String(r.accountType || "Student");
     const source = String(r.source || "");
     const currency = String(r.currency || "GBP").toUpperCase().trim();
     const amount = safeNum(r.amount);
     const statementStart = r.statementStart || "";
     const statementEnd = r.statementEnd || "";
+    const fdMaturity = r.fdMaturity || "";
+    const loanDisbursement = r.loanDisbursement || "";
 
     if (amount <= 0) continue;
 
@@ -315,37 +377,69 @@ async function calcFundsAvailable(payload, rules){
 
     // eligibility checks
     const issues = [];
-    const periodDays = dayDiffInclusive(statementStart, statementEnd);
-    if (periodDays === null) {
-      issues.push("Missing/invalid statement dates");
-    } else {
-      if (periodDays < fundsHoldDays) issues.push(`Statement period is ${periodDays} days (< ${fundsHoldDays})`);
-    }
+    let dateLabel = "";
+    let dateValue = "";
 
-    if (applicationDate && statementEnd) {
-      const endDt = new Date(statementEnd);
-      if (!Number.isNaN(endDt.getTime())) {
-        const age = daysSince(endDt, applicationDate);
-        if (age < 0) issues.push("Statement end is after application date");
-        else if (age > statementAgeDays) issues.push(`Statement end is ${age} days before application (> ${statementAgeDays})`);
-      } else {
-        issues.push("Invalid statement end date");
+    if (fundType === "fd") {
+      dateLabel = "FD maturity";
+      dateValue = fdMaturity || "";
+      const mDt = fdMaturity ? new Date(fdMaturity) : null;
+      if (!mDt || Number.isNaN(mDt.getTime())) {
+        issues.push("Missing/invalid FD maturity date");
       }
-    } else if (!applicationDate) {
-      // not mandatory, but warn for full validation
-      issues.push("No application date (31-day freshness not checked)");
+    } else if (fundType === "loan") {
+      dateLabel = "Loan disbursement";
+      dateValue = loanDisbursement || "";
+      const dDt = loanDisbursement ? new Date(loanDisbursement) : null;
+      if (!dDt || Number.isNaN(dDt.getTime())) {
+        issues.push("Missing/invalid loan disbursement letter date");
+      } else if (applicationDate && loanLetterMaxAgeDays > 0) {
+        const age = daysSince(dDt, applicationDate);
+        if (age < 0) issues.push("Loan letter date is after application date");
+        else if (age > loanLetterMaxAgeDays) issues.push(`Loan letter is ${age} days before application (> ${loanLetterMaxAgeDays})`);
+      } else if (!applicationDate) {
+        issues.push("No application date (loan letter age not checked)");
+      }
+    } else {
+      dateLabel = "Statement";
+      dateValue = [statementStart, statementEnd].filter(Boolean).join(" to ");
+      const periodDays = dayDiffInclusive(statementStart, statementEnd);
+      if (periodDays === null) {
+        issues.push("Missing/invalid statement dates");
+      } else {
+        if (periodDays < fundsHoldDays) issues.push(`Statement period is ${periodDays} days (< ${fundsHoldDays})`);
+      }
+
+      if (applicationDate && statementEnd) {
+        const endDt = new Date(statementEnd);
+        if (!Number.isNaN(endDt.getTime())) {
+          const age = daysSince(endDt, applicationDate);
+          if (age < 0) issues.push("Statement end is after application date");
+          else if (age > statementAgeDays) issues.push(`Statement end is ${age} days before application (> ${statementAgeDays})`);
+        } else {
+          issues.push("Invalid statement end date");
+        }
+      } else if (!applicationDate) {
+        // not mandatory, but warn for full validation
+        issues.push("No application date (31-day freshness not checked)");
+      }
     }
 
-    const eligible = issues.length === 0 || (issues.length === 1 && issues[0].startsWith("No application date"));
+    const eligible = issues.length === 0 || issues.every(isAppDateWarning);
     if (eligible) totalEligibleGbp += gbp;
 
     converted.push({
+      fundType,
       accountType,
       source,
       currency,
       amount: round2(amount),
       statementStart,
       statementEnd,
+      fdMaturity,
+      loanDisbursement,
+      dateLabel,
+      dateValue,
       fxToGbp: round6(rate),
       amountGbp: round2(gbp),
       eligible,
@@ -358,21 +452,62 @@ async function calcFundsAvailable(payload, rules){
     totalEligibleGbp: round2(totalEligibleGbp),
     fundsHoldDays,
     statementAgeDays,
+    loanLetterMaxAgeDays,
     hasApplicationDate: !!applicationDate,
-    anyRowMissingDates: converted.some(r => !r.statementStart || !r.statementEnd),
+    anyRowMissingDates: converted.some((r) => {
+      if (r.fundType === "fd") return !r.fdMaturity;
+      if (r.fundType === "loan") return !r.loanDisbursement;
+      return !r.statementStart || !r.statementEnd;
+    }),
     anyIneligibleRows: converted.some(r => !r.eligible),
+    skipped: false
   };
 
   return { summary, rows: converted };
 }
 
 function computeIhsBlock(payload, config, dependantsEffective){
-  const visaStart = payload.visaStart || payload.courseStart;
-  const visaEnd = payload.visaEnd || payload.courseEnd;
+  const courseStart = payload.courseStart;
+  const courseEnd = payload.courseEnd;
+  const visaEndDate = addMonthsExcel(courseEnd, 4);
+  const visaEndIso = formatDateISO(visaEndDate);
   const applyingFrom = payload.applyingFrom || "outside";
-  const ihsPerPerson = calcIHSStudent(visaStart, visaEnd, config.ihs.student_yearly_gbp, config.ihs.half_year_gbp, applyingFrom);
+
+  let totalStayDays = 0;
+  if (courseStart && visaEndDate) {
+    const cs = new Date(courseStart);
+    if (!Number.isNaN(cs.getTime())) {
+      totalStayDays = Math.floor((visaEndDate - cs) / 86400000) + 1;
+    }
+  }
+  const datedifM = datedifMonths(courseStart, visaEndIso);
+  const startDay = courseStart ? new Date(courseStart).getDate() : 0;
+  const endDay = visaEndDate ? visaEndDate.getDate() : 0;
+  const totalStayMonths = Math.max(0, datedifM + (endDay > startDay ? 1 : 0));
+
+  const chargeableUnits = Math.max(0, Math.ceil(totalStayMonths / 6));
+  const fullYears = Math.floor(chargeableUnits / 2);
+  const halfYearCharges = chargeableUnits % 2;
+  const yearlyCharges = fullYears;
+
+  const ihsPerPerson = round2((fullYears * config.ihs.student_yearly_gbp) + (halfYearCharges * config.ihs.half_year_gbp));
   const persons = 1 + Math.max(0, Math.floor(safeNum(payload.ihsDependantsCount ?? dependantsEffective ?? 0)));
-  return { ihsPerPersonGbp: round2(ihsPerPerson), persons, ihsTotalGbp: round2(ihsPerPerson * persons) };
+
+  return {
+    ihsPerPersonGbp: round2(ihsPerPerson),
+    persons,
+    ihsTotalGbp: round2(ihsPerPerson * persons),
+    visaEndDate: visaEndIso,
+    totalStayDays: Math.max(0, totalStayDays),
+    totalStayMonths,
+    chargeableUnits,
+    fullYears,
+    yearlyCharges,
+    halfYearCharges,
+    rateYearlyGbp: round2(config.ihs.student_yearly_gbp),
+    rateHalfGbp: round2(config.ihs.half_year_gbp),
+    applyingFrom
+  };
 }
 
 // --- APIs ---
@@ -450,7 +585,7 @@ app.post("/api/report", async (req, res) => {
     const gapAll = round2(fundsAvail.summary.totalAllGbp - fundsReq.fundsRequiredGbp);
 
     res.json({
-      meta: { version: "2.3.0", fxFetchedAt: lastFxFetchedAt },
+      meta: { version: APP_VERSION, fxFetchedAt: lastFxFetchedAt },
       fundsRequired: fundsReq,
       fundsAvailable: fundsAvail,
       gapGbp: gapEligible,
@@ -490,9 +625,22 @@ app.post("/api/pdf", async (req, res) => {
         gbpToQuote = 1;
       }
     }
-    const fmt = (n) => Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    const fmtGBP = (n) => `GBP ${fmt(n)}`;
-    const fmtQuote = (n) => (quote === "GBP" ? fmtGBP(n) : `${quote} ${fmt(n * gbpToQuote)}`);
+    const currencyLocale = (cur) => {
+      const c = String(cur || "").toUpperCase();
+      if (c === "INR") return "en-IN";
+      if (c === "GBP") return "en-GB";
+      if (c === "EUR") return "de-DE";
+      return "en-US";
+    };
+    const fmtCurrency = (cur, n) => new Intl.NumberFormat(currencyLocale(cur), {
+      style: "currency",
+      currency: String(cur || "GBP").toUpperCase(),
+      currencySign: "accounting",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(Number(n || 0));
+    const fmtGBP = (n) => fmtCurrency("GBP", n);
+    const fmtQuote = (n) => (quote === "GBP" ? fmtGBP(n) : fmtCurrency(quote, n * gbpToQuote));
 
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="UK_Visa_IHS_Funds_Report.pdf"`);
@@ -508,6 +656,16 @@ app.post("/api/pdf", async (req, res) => {
     const headerHeight = 70;
     const maxPages = pdfMode === "client" ? 1 : 2;
     let pageCount = 1;
+
+    const applyPdfFont = () => {
+      const fontRel = (b.pdf_font_path || "public/assets/fonts/NotoSans-Regular.ttf").replace(/^\/+/, "");
+      const fontPath = path.join(__dirname, fontRel);
+      if (fs.existsSync(fontPath)) {
+        doc.registerFont("body", fontPath);
+        doc.font("body");
+      }
+    };
+    applyPdfFont();
 
     const fitText = (text, maxWidth) => {
       const raw = String(text ?? "-");
@@ -544,7 +702,12 @@ app.post("/api/pdf", async (req, res) => {
 
       doc.fillColor("#ffffff").fontSize(15).text(b.product_name || "UK Visa Calculation Report", margin, 16, { width: pageWidth, align: "center" });
       doc.fontSize(9).text(b.company_name || "", margin, 34, { width: pageWidth, align: "center" });
-      doc.fontSize(8).fillColor("#073344").text(`Generated: ${new Date().toLocaleString()} - Mode: ${pdfMode === "client" ? "Client" : "Internal"}`, margin, headerHeight - 12, { width: pageWidth, align: "right" });
+      const fxStamp = lastFxFetchedAt ? `FX: ${new Date(lastFxFetchedAt).toLocaleString()}` : "FX: -";
+      const metaStamp = `v${APP_VERSION} | ${fxStamp}`;
+      doc.fontSize(8).fillColor("#073344")
+        .text(`Generated: ${new Date().toLocaleString()} - Mode: ${pdfMode === "client" ? "Client" : "Internal"}`, margin, headerHeight - 22, { width: pageWidth, align: "right" });
+      doc.fontSize(8).fillColor("#073344")
+        .text(metaStamp, margin, headerHeight - 10, { width: pageWidth, align: "right" });
 
       const stampText = ok ? "ELIGIBLE" : "NOT ELIGIBLE";
       doc.save();
@@ -585,46 +748,41 @@ app.post("/api/pdf", async (req, res) => {
       doc.fillColor("#000000");
     };
 
-    const drawBox = (x, boxY, w, h, title, rows, columns = 1) => {
-      doc.roundedRect(x, boxY, w, h, 8).fill("#f8fafc");
-      doc.strokeColor("#e2e8f0").lineWidth(1).roundedRect(x, boxY, w, h, 8).stroke();
-      doc.fillColor("#0f172a").fontSize(10).text(title, x + 8, boxY + 6);
-
-      const paddingTop = 20;
-      const rowHeight = 12;
-      const colGap = 12;
-      const cols = Math.max(1, columns);
-      const colWidth = (w - 16 - colGap * (cols - 1)) / cols;
-      const labelSize = 7;
-      const valueSize = 9;
-      rows.forEach((row, i) => {
-        const col = i % cols;
-        const rowIdx = Math.floor(i / cols);
-        const rx = x + 8 + col * (colWidth + colGap);
-        const ry = boxY + paddingTop + rowIdx * rowHeight;
-        doc.fontSize(labelSize).fillColor("#64748b").text(`${row.label}: `, rx, ry, { continued: true });
-        doc.fontSize(valueSize).fillColor("#0f172a");
-        drawValue(fitText(row.value ?? "-", colWidth - 8), rx, ry, colWidth - 8, valueSize, 7);
+    const measureKeyValueBoxHeight = (rows, w, labelRatio = 0.58) => {
+      const headerH = 18;
+      const paddingX = 10;
+      const labelW = Math.floor((w - paddingX * 2) * labelRatio);
+      const valueW = (w - paddingX * 2) - labelW;
+      let height = headerH + 6;
+      rows.forEach((row) => {
+        const label = String(row.label ?? "-");
+        const value = String(row.value ?? "-");
+        const lh = doc.heightOfString(label, { width: labelW });
+        const vh = doc.heightOfString(value, { width: valueW, align: "right" });
+        height += Math.max(lh, vh) + 4;
       });
+      return height;
     };
 
-    const drawInlineBox = (title, items) => {
-      const boxH = 28;
-      if (!ensureSpace(boxH + 6)) return;
-      doc.roundedRect(margin, y, pageWidth, boxH, 8).fill("#f8fafc");
-      doc.strokeColor("#e2e8f0").lineWidth(1).roundedRect(margin, y, pageWidth, boxH, 8).stroke();
-      doc.fillColor("#0f172a").fontSize(9).text(title, margin + 8, y + 6);
-      const colGap = 12;
-      const startX = margin + 90;
-      const colWidth = (pageWidth - 98 - colGap * (items.length - 1)) / items.length;
-      items.forEach((item, idx) => {
-        const x = startX + idx * (colWidth + colGap);
-        doc.fontSize(7).fillColor("#64748b").text(`${item.label}:`, x, y + 6);
-        doc.fontSize(8).fillColor("#0f172a");
-        drawValue(fitText(item.value ?? "-", colWidth), x, y + 16, colWidth, 8, 7);
+    const drawKeyValueBox = (x, boxY, w, h, title, rows, labelRatio = 0.58) => {
+      doc.roundedRect(x, boxY, w, h, 8).fill("#f8fafc");
+      doc.strokeColor("#e2e8f0").lineWidth(1).roundedRect(x, boxY, w, h, 8).stroke();
+      doc.fillColor("#0f172a").fontSize(10).text(title, x + 10, boxY + 6);
+
+      const paddingX = 10;
+      const headerH = 18;
+      const labelW = Math.floor((w - paddingX * 2) * labelRatio);
+      const valueW = (w - paddingX * 2) - labelW;
+      let ry = boxY + headerH;
+      rows.forEach((row) => {
+        const label = String(row.label ?? "-");
+        const value = String(row.value ?? "-");
+        doc.fontSize(7).fillColor("#64748b").text(label, x + paddingX, ry, { width: labelW });
+        doc.fontSize(9).fillColor("#0f172a").text(value, x + paddingX + labelW, ry, { width: valueW, align: "right" });
+        const lh = doc.heightOfString(label, { width: labelW });
+        const vh = doc.heightOfString(value, { width: valueW, align: "right" });
+        ry += Math.max(lh, vh) + 4;
       });
-      y += boxH + 8;
-      doc.fillColor("#000000");
     };
 
     const drawFundsTable = (rows) => {
@@ -632,12 +790,13 @@ app.post("/api/pdf", async (req, res) => {
       const rowH = 10;
       const maxRows = 10;
       const cols = [
-        { title: "OK", width: 24 },
-        { title: "Account", width: 70 },
-        { title: "Currency", width: 50 },
-        { title: "Amount", width: 60 },
-        { title: "GBP", width: 60 },
-        { title: "Issues", width: pageWidth - (24 + 70 + 50 + 60 + 60) - 10 },
+        { title: "OK", width: 22 },
+        { title: "Type", width: 55 },
+        { title: "Owner", width: 55 },
+        { title: "Amount", width: 70 },
+        { title: "GBP", width: 70 },
+        { title: "Date", width: 100 },
+        { title: "Issues", width: pageWidth - (22 + 55 + 55 + 70 + 70 + 100) - 10 },
       ];
 
       if (!ensureSpace(headerH + rowH + 4)) return;
@@ -650,6 +809,13 @@ app.post("/api/pdf", async (req, res) => {
       });
       y += headerH + 2;
 
+      const fundTypeLabel = (t) => {
+        const ft = String(t || "bank").toLowerCase();
+        if (ft === "fd") return "FD";
+        if (ft === "loan") return "Loan";
+        return "Bank";
+      };
+
       doc.fontSize(7);
       rows.slice(0, maxRows).forEach((r) => {
         if (!ensureSpace(rowH + 2)) return;
@@ -657,15 +823,17 @@ app.post("/api/pdf", async (req, res) => {
         const okTxt = r.eligible ? "OK" : "NO";
         doc.fillColor(r.eligible ? "#065f46" : "#9a3412").text(okTxt, cx, y, { width: cols[0].width });
         cx += cols[0].width;
-        doc.fillColor("#0f172a").text(fitText(r.accountType || "-", cols[1].width - 4), cx, y, { width: cols[1].width });
+        doc.fillColor("#0f172a").text(fitText(fundTypeLabel(r.fundType), cols[1].width - 4), cx, y, { width: cols[1].width });
         cx += cols[1].width;
-        doc.text(fitText(r.currency || "-", cols[2].width - 4), cx, y, { width: cols[2].width });
+        doc.text(fitText(r.accountType || "-", cols[2].width - 4), cx, y, { width: cols[2].width });
         cx += cols[2].width;
-        doc.text(fitText(String(r.amount || 0), cols[3].width - 4), cx, y, { width: cols[3].width });
+        doc.text(fitText(fmtCurrency(r.currency || "GBP", r.amount || 0), cols[3].width - 4), cx, y, { width: cols[3].width, align: "right" });
         cx += cols[3].width;
-        doc.text(fitText(`GBP ${String(r.amountGbp || 0)}`, cols[4].width - 4), cx, y, { width: cols[4].width });
+        doc.text(fitText(fmtGBP(r.amountGbp || 0), cols[4].width - 4), cx, y, { width: cols[4].width, align: "right" });
         cx += cols[4].width;
-        doc.fillColor("#475569").text(fitText((r.issues || []).join("; "), cols[5].width - 4), cx, y, { width: cols[5].width });
+        doc.text(fitText(r.dateValue || "-", cols[5].width - 4), cx, y, { width: cols[5].width });
+        cx += cols[5].width;
+        doc.fillColor("#475569").text(fitText((r.issues || []).join("; "), cols[6].width - 4), cx, y, { width: cols[6].width });
         y += rowH;
       });
     };
@@ -678,69 +846,132 @@ app.post("/api/pdf", async (req, res) => {
     const colGap = 12;
     const halfWidth = (pageWidth - colGap) / 2;
     const rowTop = y;
-    const boxH1 = 86;
+    const courseRows = [
+      { label: "University", value: payload.universityName || "-" },
+      { label: "Study location", value: normalizeRegion(payload.region || "outside_london") === "london" ? "London" : "Outside London" },
+      { label: "Course dates", value: courseDates },
+      { label: "Visa application", value: payload.applicationDate || "-" },
+      { label: "Display currency", value: quote },
+      { label: "Dependants", value: fundsReq.dependantsCountEffective },
+    ];
+    const studentRows = [
+      { label: "Acknowledgement No", value: payload.studentAckNumber || "-" },
+      { label: "Student name", value: payload.studentName || "-" },
+      { label: "Program", value: payload.studentProgram || "-" },
+      { label: "Status", value: payload.studentStatus || "-" },
+      { label: "Intake - InYear", value: payload.studentIntakeYear || "-" },
+      { label: "City / Country", value: studentCityCountry || "-" },
+    ];
+    const boxH1 = Math.max(
+      measureKeyValueBoxHeight(courseRows, halfWidth),
+      measureKeyValueBoxHeight(studentRows, halfWidth)
+    );
     if (ensureSpace(boxH1)) {
-      drawBox(margin, rowTop, halfWidth, boxH1, "Course details", [
-        { label: "University", value: payload.universityName || "-" },
-        { label: "Study location", value: normalizeRegion(payload.region || "outside_london") === "london" ? "London" : "Outside London" },
-        { label: "Course dates", value: courseDates },
-        { label: "Visa application", value: payload.applicationDate || "-" },
-        { label: "Display currency", value: quote },
-        { label: "Dependants", value: fundsReq.dependantsCountEffective },
-      ], 1);
-      drawBox(margin + halfWidth + colGap, rowTop, halfWidth, boxH1, "Student details", [
-        { label: "Acknowledgement No", value: payload.studentAckNumber || "-" },
-        { label: "Student name", value: payload.studentName || "-" },
-        { label: "Program", value: payload.studentProgram || "-" },
-        { label: "Status", value: payload.studentStatus || "-" },
-        { label: "Intake - InYear", value: payload.studentIntakeYear || "-" },
-        { label: "City / Country", value: studentCityCountry || "-" },
-      ], 1);
+      drawKeyValueBox(margin, rowTop, halfWidth, boxH1, "Course details", courseRows);
+      drawKeyValueBox(margin + halfWidth + colGap, rowTop, halfWidth, boxH1, "Student details", studentRows);
       y = rowTop + boxH1 + 8;
     }
 
-    drawInlineBox("Counselor details", [
+    const counselorRows = [
       { label: "Name", value: payload.counselorName || "-" },
       { label: "Email", value: payload.counselorEmail || "-" },
       { label: "Region/Sub", value: [payload.counselorRegion, payload.counselorSubRegion].filter(Boolean).join(" / ") || "-" },
       { label: "Role", value: [payload.counselorDesignation, payload.counselorRoles].filter(Boolean).join(" / ") || "-" },
-    ]);
+    ];
+    const counselorH = measureKeyValueBoxHeight(counselorRows, pageWidth, 0.42);
+    if (ensureSpace(counselorH)) {
+      drawKeyValueBox(margin, y, pageWidth, counselorH, "Counselor details", counselorRows, 0.42);
+      y += counselorH + 8;
+    }
 
-    const boxH2 = 88;
+    const ihsParts = [];
+    if (ihs.yearlyCharges > 0) ihsParts.push(`${fmtGBP(ihs.rateYearlyGbp)} x ${ihs.yearlyCharges} year${ihs.yearlyCharges > 1 ? "s" : ""}`);
+    if (ihs.halfYearCharges > 0) ihsParts.push(`${fmtGBP(ihs.rateHalfGbp)} x ${ihs.halfYearCharges} half-year${ihs.halfYearCharges > 1 ? "s" : ""}`);
+    const ihsCalcText = ihsParts.length ? `${ihsParts.join(" + ")} = ${fmtGBP(ihs.ihsPerPersonGbp)} per person` : "No IHS";
+
     const rowTop2 = y;
+    const feesRows = [
+      { label: "Tuition total", value: `${fmtGBP(safeNum(payload.tuitionFeeTotalGbp))} (${fmtQuote(safeNum(payload.tuitionFeeTotalGbp))})` },
+      { label: "Tuition paid", value: `${fmtGBP(safeNum(payload.tuitionFeePaidGbp))} (${fmtQuote(safeNum(payload.tuitionFeePaidGbp))})` },
+      { label: "Scholarship", value: `${fmtGBP(safeNum(payload.scholarshipGbp))} (${fmtQuote(safeNum(payload.scholarshipGbp))})` },
+      { label: "Buffer", value: `${fmtGBP(safeNum(payload.bufferGbp))} (${fmtQuote(safeNum(payload.bufferGbp))})` },
+      { label: "Visa end date", value: ihs.visaEndDate || "-" },
+      { label: "Total stay", value: `${ihs.totalStayMonths} months (${ihs.totalStayDays} days)` },
+      { label: "Chargeable units", value: `${ihs.chargeableUnits} x 6-month` },
+      { label: "IHS calculation", value: ihsCalcText },
+      { label: "IHS total", value: `${fmtGBP(ihs.ihsTotalGbp)} (${fmtQuote(ihs.ihsTotalGbp)})` },
+    ];
+    const fundsReqRows = [
+      { label: "Tuition due", value: `${fmtGBP(fundsReq.tuitionDueGbp)} (${fmtQuote(fundsReq.tuitionDueGbp)})` },
+      { label: "Maintenance (student)", value: `${fmtGBP(fundsReq.maintenanceStudentGbp)} (${fmtQuote(fundsReq.maintenanceStudentGbp)})` },
+      { label: "Maintenance (dependants)", value: `${fmtGBP(fundsReq.maintenanceDependantsGbp)} (${fmtQuote(fundsReq.maintenanceDependantsGbp)})` },
+      { label: "Buffer", value: `${fmtGBP(fundsReq.bufferGbp)} (${fmtQuote(fundsReq.bufferGbp)})` },
+    ];
+    const boxH2 = Math.max(
+      measureKeyValueBoxHeight(feesRows, halfWidth),
+      measureKeyValueBoxHeight(fundsReqRows, halfWidth)
+    );
     if (ensureSpace(boxH2)) {
-      drawBox(margin, rowTop2, halfWidth, boxH2, "Fees and IHS", [
-        { label: "Tuition total", value: `${fmtGBP(safeNum(payload.tuitionFeeTotalGbp))} (${fmtQuote(safeNum(payload.tuitionFeeTotalGbp))})` },
-        { label: "Tuition paid", value: `${fmtGBP(safeNum(payload.tuitionFeePaidGbp))} (${fmtQuote(safeNum(payload.tuitionFeePaidGbp))})` },
-        { label: "Scholarship", value: `${fmtGBP(safeNum(payload.scholarshipGbp))} (${fmtQuote(safeNum(payload.scholarshipGbp))})` },
-        { label: "Buffer", value: `${fmtGBP(safeNum(payload.bufferGbp))} (${fmtQuote(safeNum(payload.bufferGbp))})` },
-        { label: "IHS per person", value: `${fmtGBP(ihs.ihsPerPersonGbp)} (${fmtQuote(ihs.ihsPerPersonGbp)})` },
-        { label: "IHS total", value: `${fmtGBP(ihs.ihsTotalGbp)} (${fmtQuote(ihs.ihsTotalGbp)})` },
-      ], 1);
-      drawBox(margin + halfWidth + colGap, rowTop2, halfWidth, boxH2, "Funds required (28-day)", [
-        { label: "Tuition due", value: `${fmtGBP(fundsReq.tuitionDueGbp)} (${fmtQuote(fundsReq.tuitionDueGbp)})` },
-        { label: "Maintenance (student)", value: `${fmtGBP(fundsReq.maintenanceStudentGbp)} (${fmtQuote(fundsReq.maintenanceStudentGbp)})` },
-        { label: "Maintenance (dependants)", value: `${fmtGBP(fundsReq.maintenanceDependantsGbp)} (${fmtQuote(fundsReq.maintenanceDependantsGbp)})` },
-        { label: "Buffer", value: `${fmtGBP(fundsReq.bufferGbp)} (${fmtQuote(fundsReq.bufferGbp)})` },
-      ], 1);
+      drawKeyValueBox(margin, rowTop2, halfWidth, boxH2, "Fees and IHS", feesRows, 0.5);
+      drawKeyValueBox(margin + halfWidth + colGap, rowTop2, halfWidth, boxH2, "Funds required (28-day)", fundsReqRows, 0.5);
       y = rowTop2 + boxH2 + 8;
     }
 
-    drawInlineBox("Totals", [
+    const gapLabel = gapEligible >= 0 ? "Funds are sufficient" : "Additional funds required";
+    const gapValue = gapEligible >= 0 ? fmtGBP(gapEligible) : fmtGBP(Math.abs(gapEligible));
+    const gapValueQuote = quote === "GBP" ? "" : ` | ${gapEligible >= 0 ? fmtQuote(gapEligible) : fmtQuote(Math.abs(gapEligible))}`;
+    const totalsRows = [
       { label: "Total required", value: `${fmtGBP(fundsReq.fundsRequiredGbp)} (${fmtQuote(fundsReq.fundsRequiredGbp)})` },
       { label: "Eligible funds", value: `${fmtGBP(fundsAvail.summary.totalEligibleGbp)} (${fmtQuote(fundsAvail.summary.totalEligibleGbp)})` },
-      { label: "Gap (Eligible-Required)", value: fmtGBP(gapEligible) + (quote === "GBP" ? "" : ` | ${fmtQuote(gapEligible)}`) },
-    ]);
+      { label: gapLabel, value: `${gapValue}${gapValueQuote}` },
+    ];
+    const totalsH = measureKeyValueBoxHeight(totalsRows, pageWidth, 0.5);
+    if (ensureSpace(totalsH)) {
+      drawKeyValueBox(margin, y, pageWidth, totalsH, "Totals", totalsRows, 0.5);
+      y += totalsH + 8;
+    }
+
+    if (!fundsAvail.summary.skipped) {
+      const issueCounts = new Map();
+      fundsAvail.rows.forEach((r) => {
+        if (!r.issues || !r.issues.length) return;
+        if (r.eligible) return;
+        r.issues.forEach((i) => issueCounts.set(i, (issueCounts.get(i) || 0) + 1));
+      });
+      const topIssues = [...issueCounts.entries()].sort((a, b) => b[1] - a[1]);
+      if (topIssues.length) {
+        const issueText = topIssues.map(([msg, count]) => `- ${msg} (${count})`).join("\n");
+        const issueBoxH = Math.max(28, doc.heightOfString(issueText, { width: pageWidth - 20 }) + 18);
+        if (ensureSpace(issueBoxH)) {
+          doc.roundedRect(margin, y, pageWidth, issueBoxH, 8).fill("#fff7ed");
+          doc.strokeColor("#fed7aa").lineWidth(1).roundedRect(margin, y, pageWidth, issueBoxH, 8).stroke();
+          doc.fillColor("#9a3412").fontSize(9).text("Issue summary", margin + 10, y + 6);
+          doc.fillColor("#7c2d12").fontSize(8).text(issueText, margin + 10, y + 18, { width: pageWidth - 20 });
+          y += issueBoxH + 8;
+        }
+      }
+    }
 
     if (pdfMode === "internal") {
-      drawFundsTable(fundsAvail.rows);
-      y += 6;
+      if (fundsAvail.summary.skipped) {
+        const noteH = 22;
+        if (ensureSpace(noteH + 6)) {
+          doc.roundedRect(margin, y, pageWidth, noteH, 6).fill("#fff7ed");
+          doc.strokeColor("#fed7aa").lineWidth(1).roundedRect(margin, y, pageWidth, noteH, 6).stroke();
+          doc.fillColor("#9a3412").fontSize(8).text("Funds section skipped: student marked as not holding funds yet.", margin + 8, y + 6, { width: pageWidth - 16 });
+          y += noteH + 6;
+        }
+      } else {
+        drawFundsTable(fundsAvail.rows);
+        y += 6;
+      }
     }
 
     const ruleText =
-      `Rules reminder: Funds must be held for ${config.rules.funds_hold_days} consecutive days. ` +
-      `Statement end date must be within ${config.rules.statement_age_days} days of the visa application date. ` +
-      `Visa application date is required for the statement freshness check.`;
+      `Bank statements: funds must be held for ${config.rules.funds_hold_days} consecutive days and end within ${config.rules.statement_age_days} days of the visa application date. ` +
+      `FDs: maturity date required (28/31-day checks not applied). ` +
+      `Education loans: disbursement letter should be within ${config.rules.loan_letter_max_age_days ?? 180} days of the application. ` +
+      `Visa application date is required for freshness checks.`;
     const rulesHeight = 22;
     if (y + rulesHeight > bottomLimit()) {
       y = bottomLimit() - rulesHeight;

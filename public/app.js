@@ -41,12 +41,15 @@ const els = {
   addRow: $("addRow"),
   clearRows: $("clearRows"),
   fundsTbody: document.querySelector("#fundsTable tbody"),
+  fundsSkip: $("fundsSkip"),
+  fundsSkipNote: $("fundsSkipNote"),
 
   btnCalc: $("btnCalc"),
   btnPdf: $("btnPdf"),
   btnReset: $("btnReset"),
 
   ihsGbp: $("ihsGbp"),
+  ihsCalc: $("ihsCalc"),
   ihsFx: $("ihsFx"),
   fundsReqGbp: $("fundsReqGbp"),
   fundsReqFx: $("fundsReqFx"),
@@ -54,6 +57,7 @@ const els = {
   fundsAvailFx: $("fundsAvailFx"),
   gapGbp: $("gapGbp"),
   gapFx: $("gapFx"),
+  gapLabel: $("gapLabel"),
 
   bTuition: $("bTuition"),
   bStudent: $("bStudent"),
@@ -62,6 +66,7 @@ const els = {
   bTotal: $("bTotal"),
   fundsAvailBreakBody: document.querySelector("#fundsAvailBreak tbody"),
   validationNote: $("validationNote"),
+  issueSummary: $("issueSummary"),
   rulesNote: $("rulesNote"),
   eligibilityStatus: $("eligibilityStatus"),
   sourcesNote: $("sourcesNote"),
@@ -71,8 +76,22 @@ let CONFIG = null;
 let SELECTED_REGION = "outside_london";
 let CURRENT_STUDENT = null;
 let CURRENT_COUNSELOR = null;
-const fmt = (n) => (Number.isFinite(n) ? n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "-");
-const fmtGBP = (n) => `GBP ${fmt(n)}`;
+const currencyLocale = (cur) => {
+  const c = String(cur || "").toUpperCase();
+  if (c === "INR") return "en-IN";
+  if (c === "GBP") return "en-GB";
+  if (c === "EUR") return "de-DE";
+  return "en-US";
+};
+const fmtNumber = (n) => (Number.isFinite(n) ? n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "-");
+const fmtMoney = (cur, n) => new Intl.NumberFormat(currencyLocale(cur), {
+  style: "currency",
+  currency: String(cur || "GBP").toUpperCase(),
+  currencySign: "accounting",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2
+}).format(Number(n || 0));
+const fmtGBP = (n) => fmtMoney("GBP", n);
 
 function setActiveTab(id){
   document.querySelectorAll(".tab").forEach(b => b.classList.toggle("active", b.dataset.tab === id));
@@ -368,34 +387,68 @@ els.universitySelect.addEventListener("change", () => {
 function getFundsRows(){
   const rows = [];
   els.fundsTbody.querySelectorAll("tr").forEach(tr=>{
-    const cells = tr.querySelectorAll("input,select");
-    // order: accountType(select), source(input), currency(select), amount(input), statementStart(date), statementEnd(date)
-    const [accountType, source, currency, amount, statementStart, statementEnd] = cells;
+    const fundType = tr.querySelector("[data-role='fundType']")?.value || "bank";
+    const accountType = tr.querySelector("[data-role='accountType']")?.value || "Student";
+    const source = tr.querySelector("[data-role='source']")?.value || "";
+    const currency = tr.querySelector("[data-role='currency']")?.value || "GBP";
+    const amount = Number(tr.querySelector("[data-role='amount']")?.value || 0);
+    const statementStart = tr.querySelector("[data-field='statementStart']")?.value || "";
+    const statementEnd = tr.querySelector("[data-field='statementEnd']")?.value || "";
+    const fdMaturity = tr.querySelector("[data-field='fdMaturity']")?.value || "";
+    const loanDisbursement = tr.querySelector("[data-field='loanDisbursement']")?.value || "";
     rows.push({
-      accountType: accountType.value || "Student",
-      source: source.value || "",
-      currency: currency.value || "GBP",
-      amount: Number(amount.value || 0),
-      statementStart: statementStart.value || "",
-      statementEnd: statementEnd.value || ""
+      fundType,
+      accountType,
+      source,
+      currency,
+      amount,
+      statementStart,
+      statementEnd,
+      fdMaturity,
+      loanDisbursement
     });
   });
   return rows;
+}
+
+function setFundFieldState(input, enabled){
+  if (!input) return;
+  input.disabled = !enabled;
+  input.classList.toggle("muted-field", !enabled);
+  if (!enabled) input.value = "";
+}
+
+function updateFundRow(tr){
+  const fundType = tr.querySelector("[data-role='fundType']")?.value || "bank";
+  const isBank = fundType === "bank";
+  const isFd = fundType === "fd";
+  const isLoan = fundType === "loan";
+  setFundFieldState(tr.querySelector("[data-field='statementStart']"), isBank);
+  setFundFieldState(tr.querySelector("[data-field='statementEnd']"), isBank);
+  setFundFieldState(tr.querySelector("[data-field='fdMaturity']"), isFd);
+  setFundFieldState(tr.querySelector("[data-field='loanDisbursement']"), isLoan);
 }
 
 function addFundsRow(pref={}){
   const tr = document.createElement("tr");
   tr.innerHTML = `
     <td>
-      <select>
+      <select data-role="fundType">
+        <option value="bank">Bank statement</option>
+        <option value="fd">Fixed deposit (FD)</option>
+        <option value="loan">Education loan</option>
+      </select>
+    </td>
+    <td>
+      <select data-role="accountType">
         <option value="Student">Student</option>
         <option value="Parent">Parent</option>
         <option value="Sponsor">Sponsor</option>
       </select>
     </td>
-    <td><input type="text" placeholder="Bank / Sponsor / Account notes" value="${pref.source || ""}"></td>
+    <td><input data-role="source" type="text" placeholder="Bank / Sponsor / Account notes" value="${pref.source || ""}"></td>
     <td>
-      <select>
+      <select data-role="currency">
         <option value="GBP">GBP - British Pound (GBP)</option>
         <option value="INR">INR - Indian Rupee (INR)</option>
         <option value="USD">USD - US Dollar (USD)</option>
@@ -412,21 +465,42 @@ function addFundsRow(pref={}){
         <option value="SAR">SAR - Saudi Riyal (SAR)</option>
       </select>
     </td>
-    <td><input type="number" min="0" step="0.01" placeholder="Closing balance" value="${pref.amount || ""}"></td>
-    <td><input type="date" value="${pref.statementStart || ""}"></td>
-    <td><input type="date" value="${pref.statementEnd || ""}"></td>
+    <td><input data-role="amount" type="number" min="0" step="0.01" placeholder="Closing balance" value="${pref.amount || ""}"></td>
+    <td><input data-field="statementStart" type="date" value="${pref.statementStart || ""}"></td>
+    <td><input data-field="statementEnd" type="date" value="${pref.statementEnd || ""}"></td>
+    <td><input data-field="fdMaturity" type="date" value="${pref.fdMaturity || ""}"></td>
+    <td><input data-field="loanDisbursement" type="date" value="${pref.loanDisbursement || ""}"></td>
     <td><button class="icon-btn" title="Remove">X</button></td>
   `;
-  const [acctSel, curSel] = tr.querySelectorAll("select");
+  const fundTypeSel = tr.querySelector("[data-role='fundType']");
+  const acctSel = tr.querySelector("[data-role='accountType']");
+  const curSel = tr.querySelector("[data-role='currency']");
+  fundTypeSel.value = pref.fundType || "bank";
   acctSel.value = pref.accountType || "Student";
   curSel.value = pref.currency || "GBP";
 
+  fundTypeSel.addEventListener("change", () => updateFundRow(tr));
   tr.querySelector(".icon-btn").addEventListener("click", ()=> tr.remove());
+  updateFundRow(tr);
   els.fundsTbody.appendChild(tr);
 }
 
-els.addRow.addEventListener("click", () => addFundsRow({ accountType:"Student", currency:"INR" }));
+function toggleFundsSkip(){
+  const skip = Boolean(els.fundsSkip && els.fundsSkip.checked);
+  if (els.fundsSkipNote) els.fundsSkipNote.style.display = skip ? "block" : "none";
+  if (els.addRow) els.addRow.disabled = skip;
+  if (els.clearRows) els.clearRows.disabled = skip;
+  els.fundsTbody.querySelectorAll("input,select,button").forEach(el => {
+    el.disabled = skip;
+  });
+  if (!skip) {
+    els.fundsTbody.querySelectorAll("tr").forEach(updateFundRow);
+  }
+}
+
+els.addRow.addEventListener("click", () => addFundsRow({ fundType:"bank", accountType:"Student", currency:"INR" }));
 els.clearRows.addEventListener("click", () => { els.fundsTbody.innerHTML = ""; });
+if (els.fundsSkip) els.fundsSkip.addEventListener("change", toggleFundsSkip);
 
 async function fx(from, to){
   if (from === to) return 1;
@@ -477,7 +551,8 @@ function payload(){
     dependantsCount: Number(els.dependants.value || 0),
     bufferGbp: Number(els.buffer.value || 0),
 
-    fundsRows: getFundsRows(),
+    fundsSkip: Boolean(els.fundsSkip && els.fundsSkip.checked),
+    fundsRows: (els.fundsSkip && els.fundsSkip.checked) ? [] : getFundsRows(),
 
     manualFx: {
       enabled: Boolean(els.useManualFx && els.useManualFx.checked),
@@ -532,8 +607,9 @@ function validateTab(tabId){
   }
   if (tabId === "t3"){
     // At least one funds row required
+    const skip = Boolean(els.fundsSkip && els.fundsSkip.checked);
     const rows = getFundsRows();
-    if (!rows.length) errs.push("Add at least one bank statement line in Funds section.");
+    if (!skip && !rows.length) errs.push("Add at least one fund row or use the skip option.");
   }
   showErrors(errs);
   return errs.length === 0;
@@ -546,6 +622,16 @@ function validateCore(){
   return null;
 }
 
+function buildIhsCalc(ihs){
+  if (!ihs) return "-";
+  const parts = [];
+  if (ihs.yearlyCharges > 0) parts.push(`${fmtMoney("GBP", ihs.rateYearlyGbp)} x ${ihs.yearlyCharges} year${ihs.yearlyCharges > 1 ? "s" : ""}`);
+  if (ihs.halfYearCharges > 0) parts.push(`${fmtMoney("GBP", ihs.rateHalfGbp)} x ${ihs.halfYearCharges} half-year${ihs.halfYearCharges > 1 ? "s" : ""}`);
+  const perPerson = parts.length ? `${parts.join(" + ")} = ${fmtMoney("GBP", ihs.ihsPerPersonGbp)} per person` : "No IHS";
+  const persons = ihs.persons ? `; x ${ihs.persons} person${ihs.persons > 1 ? "s" : ""}` : "";
+  return `Visa end: ${ihs.visaEndDate || "-"}; stay: ${ihs.totalStayMonths} months (${ihs.chargeableUnits} x 6-month). ${perPerson}${persons}`;
+}
+
 async function calculate(){
   const err = validateCore();
   if (err) { alert(err); return; }
@@ -556,17 +642,23 @@ async function calculate(){
   const quote = els.quote.value;
   const gbpToQuote = await fx("GBP", quote);
 
-  els.ihsGbp.textContent = fmtGBP(out.ihs.ihsTotalGbp);
-  els.ihsFx.textContent = `${quote} ${fmt(out.ihs.ihsTotalGbp * gbpToQuote)} (1 GBP = ${gbpToQuote.toFixed(4)} ${quote})`;
+  const gapEligible = Number(out.gapEligibleOnlyGbp) || 0;
+  const gapLabel = gapEligible >= 0 ? "Funds are sufficient" : "Additional funds required";
+  const gapDisplay = gapEligible >= 0 ? gapEligible : Math.abs(gapEligible);
 
-  els.fundsReqGbp.textContent = fmtGBP(out.fundsRequired.fundsRequiredGbp);
-  els.fundsReqFx.textContent = `${quote} ${fmt(out.fundsRequired.fundsRequiredGbp * gbpToQuote)}`;
+  if (els.gapLabel) els.gapLabel.textContent = gapLabel;
+  els.ihsGbp.textContent = fmtMoney("GBP", out.ihs.ihsTotalGbp);
+  if (els.ihsCalc) els.ihsCalc.textContent = buildIhsCalc(out.ihs);
+  els.ihsFx.textContent = `${fmtMoney(quote, out.ihs.ihsTotalGbp * gbpToQuote)} (1 GBP = ${gbpToQuote.toFixed(4)} ${quote})`;
 
-  els.fundsAvailGbp.textContent = fmtGBP(out.fundsAvailable.summary.totalEligibleGbp);
-  els.fundsAvailFx.textContent = `${quote} ${fmt(out.fundsAvailable.summary.totalEligibleGbp * gbpToQuote)}`;
+  els.fundsReqGbp.textContent = fmtMoney("GBP", out.fundsRequired.fundsRequiredGbp);
+  els.fundsReqFx.textContent = fmtMoney(quote, out.fundsRequired.fundsRequiredGbp * gbpToQuote);
 
-  els.gapGbp.textContent = fmtGBP(out.gapEligibleOnlyGbp);
-  els.gapFx.textContent = `${quote} ${fmt(out.gapEligibleOnlyGbp * gbpToQuote)}`;
+  els.fundsAvailGbp.textContent = fmtMoney("GBP", out.fundsAvailable.summary.totalEligibleGbp);
+  els.fundsAvailFx.textContent = fmtMoney(quote, out.fundsAvailable.summary.totalEligibleGbp * gbpToQuote);
+
+  els.gapGbp.textContent = fmtMoney("GBP", gapDisplay);
+  els.gapFx.textContent = fmtMoney(quote, gapDisplay * gbpToQuote);
 
   // Eligibility status (simple for students/parents)
   if (els.eligibilityStatus){
@@ -576,43 +668,79 @@ async function calculate(){
     els.eligibilityStatus.classList.add(ok ? "eligible" : "noteligible");
   }
 
-  els.bTuition.textContent = fmtGBP(out.fundsRequired.tuitionDueGbp);
-  els.bStudent.textContent = fmtGBP(out.fundsRequired.maintenanceStudentGbp);
-  els.bDeps.textContent = fmtGBP(out.fundsRequired.maintenanceDependantsGbp);
-  els.bBuffer.textContent = fmtGBP(out.fundsRequired.bufferGbp);
-  els.bTotal.textContent = fmtGBP(out.fundsRequired.fundsRequiredGbp);
+  els.bTuition.textContent = fmtMoney("GBP", out.fundsRequired.tuitionDueGbp);
+  els.bStudent.textContent = fmtMoney("GBP", out.fundsRequired.maintenanceStudentGbp);
+  els.bDeps.textContent = fmtMoney("GBP", out.fundsRequired.maintenanceDependantsGbp);
+  els.bBuffer.textContent = fmtMoney("GBP", out.fundsRequired.bufferGbp);
+  els.bTotal.textContent = fmtMoney("GBP", out.fundsRequired.fundsRequiredGbp);
 
   els.fundsAvailBreakBody.innerHTML = "";
-  out.fundsAvailable.rows.forEach(r=>{
+  const fundTypeLabel = (t) => {
+    const ft = String(t || "bank").toLowerCase();
+    if (ft === "fd") return "Fixed deposit";
+    if (ft === "loan") return "Education loan";
+    return "Bank statement";
+  };
+  if (out.fundsAvailable.summary.skipped) {
     const tr = document.createElement("tr");
-    tr.className = r.eligible ? "" : "row-bad";
-    tr.innerHTML = `
-      <td>${r.eligible ? "OK" : "NOT OK"}</td>
-      <td>${escapeHtml(r.accountType || "")}</td>
-      <td>${escapeHtml(r.source || "")}</td>
-      <td>${fmt(r.amount)}</td>
-      <td>${r.currency}</td>
-      <td>${r.fxToGbp ?? ""}</td>
-      <td>GBP ${fmt(r.amountGbp)}</td>
-      <td>${escapeHtml((r.issues || []).join("; "))}</td>
-    `;
+    tr.innerHTML = `<td colspan="9">Funds section skipped by user.</td>`;
     els.fundsAvailBreakBody.appendChild(tr);
-  });
+  } else {
+    out.fundsAvailable.rows.forEach(r=>{
+      const tr = document.createElement("tr");
+      tr.className = r.eligible ? "" : "row-bad";
+      const dateText = r.dateLabel ? `${r.dateLabel}: ${r.dateValue || "-"}` : (r.dateValue || "-");
+      tr.innerHTML = `
+        <td>${r.eligible ? "OK" : "NOT OK"}</td>
+        <td>${escapeHtml(fundTypeLabel(r.fundType))}</td>
+        <td>${escapeHtml(r.accountType || "")}</td>
+        <td>${escapeHtml(r.source || "")}</td>
+        <td>${escapeHtml(fmtMoney(r.currency, r.amount))}</td>
+        <td>${escapeHtml(r.currency || "")}</td>
+        <td>${escapeHtml(fmtMoney("GBP", r.amountGbp))}</td>
+        <td>${escapeHtml(dateText)}</td>
+        <td>${escapeHtml((r.issues || []).join("; "))}</td>
+      `;
+      els.fundsAvailBreakBody.appendChild(tr);
+    });
+  }
 
   // Validation/Warn panel
   const s = out.fundsAvailable.summary;
   const warns = [];
-  if (!s.hasApplicationDate) warns.push("Application date not provided - 31-day statement freshness is NOT checked.");
-  warns.push("31-day statement freshness is checked only if the visa application date is entered.");
-  if (s.anyRowMissingDates) warns.push("Some fund rows are missing statement dates - those rows are treated as NOT eligible.");
+  if (s.skipped) warns.push("Funds section skipped - available funds treated as GBP 0.");
+  if (!s.hasApplicationDate) warns.push("Application date not provided - freshness checks are NOT verified.");
+  warns.push("31-day statement freshness is checked only for bank statements when the visa application date is entered.");
+  if (s.anyRowMissingDates) warns.push("Some fund rows are missing required dates - those rows are treated as NOT eligible.");
   if (s.anyIneligibleRows) warns.push("Some fund rows are NOT eligible due to rule violations (see breakdown).");
   if (s.totalEligibleGbp < out.fundsRequired.fundsRequiredGbp) warns.push("Eligible funds are LESS than required funds - student may be ineligible (based on entered data).");
 
   els.validationNote.innerHTML = warns.length ? ("<strong>Validation warnings:</strong><br>" + warns.map(w=>`- ${escapeHtml(w)}`).join("<br>")) : "<strong>Validation:</strong> All entered fund rows meet the checks (based on provided dates).";
 
+  if (els.issueSummary){
+    const issues = new Map();
+    out.fundsAvailable.rows.forEach((r) => {
+      if (!r.issues || !r.issues.length) return;
+      if (r.eligible) return;
+      r.issues.forEach((i) => issues.set(i, (issues.get(i) || 0) + 1));
+    });
+    const top = [...issues.entries()].sort((a, b) => b[1] - a[1]);
+    if (s.skipped) {
+      els.issueSummary.style.display = "block";
+      els.issueSummary.innerHTML = "<strong>Issue summary:</strong> Funds section skipped by user.";
+    } else if (top.length) {
+      els.issueSummary.style.display = "block";
+      els.issueSummary.innerHTML = "<strong>Issue summary:</strong><br>" + top.map(([msg, count]) => `- ${escapeHtml(msg)} (${count})`).join("<br>");
+    } else {
+      els.issueSummary.style.display = "none";
+      els.issueSummary.textContent = "";
+    }
+  }
+
   els.rulesNote.innerHTML =
-    `<strong>28-day rule:</strong> Funds must be held for <strong>${out.rules.funds_hold_days} consecutive days</strong>. ` +
-    `The end date of the 28-day period must be within <strong>${out.rules.statement_age_days} days</strong> of the visa application date. ` +
+    `<strong>Bank statements:</strong> Funds must be held for <strong>${out.rules.funds_hold_days} consecutive days</strong> and end within <strong>${out.rules.statement_age_days} days</strong> of the visa application date. ` +
+    `<strong>FDs:</strong> Maturity date is required (28/31-day rule does not apply). ` +
+    `<strong>Education loans:</strong> Disbursement letter should be within <strong>${out.rules.loan_letter_max_age_days || 180} days</strong> of application. ` +
     `Maintenance months cap applied: <strong>${out.fundsRequired.monthsRequired}</strong>.`;
 }
 
@@ -663,17 +791,23 @@ function resetAll(){
 
   // Funds rows
   els.fundsTbody.innerHTML = "";
+  if (els.fundsSkip) els.fundsSkip.checked = false;
 
   // Results placeholders
-  ["ihsGbp","ihsFx","fundsReqGbp","fundsReqFx","fundsAvailGbp","fundsAvailFx","gapGbp","gapFx","bTuition","bStudent","bDeps","bBuffer","bTotal"]
+  ["ihsGbp","ihsCalc","ihsFx","fundsReqGbp","fundsReqFx","fundsAvailGbp","fundsAvailFx","gapGbp","gapFx","bTuition","bStudent","bDeps","bBuffer","bTotal"]
     .forEach(id => $(id).textContent = "-");
   els.fundsAvailBreakBody.innerHTML = "";
   els.validationNote.textContent = "";
+  if (els.issueSummary) {
+    els.issueSummary.textContent = "";
+    els.issueSummary.style.display = "none";
+  }
   els.rulesNote.textContent = "";
   if (els.eligibilityStatus){
     els.eligibilityStatus.textContent = "Status: -";
     els.eligibilityStatus.className = "statusbadge neutral";
   }
+  if (els.gapLabel) els.gapLabel.textContent = "Gap (Eligible - Required)";
   if (els.uniSuggest) els.uniSuggest.style.display = "none";
   if (els.studentAck) els.studentAck.value = "";
   if (els.studentName) els.studentName.value = "";
@@ -689,6 +823,7 @@ function resetAll(){
   if (els.counselorSuggest) els.counselorSuggest.style.display = "none";
 
   showErrors([]);
+  toggleFundsSkip();
 }
 
 els.btnCalc.addEventListener("click", calculate);
@@ -737,6 +872,7 @@ function initAccessCode(){
 initAccessCode();
 initStudentSearch();
 initCounselorSearch();
+toggleFundsSkip();
 
 
 // Step navigation guard

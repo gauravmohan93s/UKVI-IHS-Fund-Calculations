@@ -31,7 +31,8 @@
   },
   "rules": {
     "funds_hold_days": 28,
-    "statement_age_days": 31
+    "statement_age_days": 31,
+    "loan_letter_max_age_days": 180
   },
   "ihs": {
     "student_yearly_gbp": 776,

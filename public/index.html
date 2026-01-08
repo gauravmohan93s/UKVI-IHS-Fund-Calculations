@@ -196,27 +196,38 @@
 
   <section class="card tabpane" id="t3">
     <h2>Funds in bank statement (Inputs)</h2>
-    <p class="muted small">Add each bank statement line (any currency). Amount is the closing balance. We convert to GBP using live FX.</p>
+    <p class="muted small">Add each fund source line (bank statement, fixed deposit, or education loan). Amount is the closing balance or sanctioned amount. We convert to GBP using live FX.</p>
+    <label class="toggle">
+      <input type="checkbox" id="fundsSkip"/>
+      <span>No funds held yet - skip this section</span>
+    </label>
+    <div class="helper" id="fundsSkipNote" style="display:none">Funds validation will be skipped and available funds will be treated as GBP 0.</div>
 
     <div class="table-actions">
       <button id="addRow" class="secondary">+ Add row</button>
       <button id="clearRows" class="secondary">Clear</button>
     </div>
 
-    <table class="table" id="fundsTable">
+    <div class="table-wrap">
+      <table class="table" id="fundsTable">
       <thead>
         <tr>
+          <th>Fund type</th>
           <th>Account type</th>
           <th>Source/Notes</th>
           <th>Currency (full name)</th>
           <th>Closing balance amount</th>
           <th>Statement start</th>
           <th>Statement end</th>
+          <th>FD maturity date</th>
+          <th>Loan disbursement date</th>
           <th></th>
         </tr>
       </thead>
       <tbody></tbody>
-    </table>
+      </table>
+    </div>
+    <p class="muted small">Bank statements require start/end dates. Fixed deposits require a maturity date. Education loans require the disbursement letter date.</p>
 
     <div class="nav">
       <button class="secondary" data-prev="t2">Back</button>
@@ -226,6 +237,7 @@
 
   <section class="card tabpane" id="t4">
     <h2>Results (Read-only)</h2>
+    <p class="muted small">Press <strong>Calculate</strong> to refresh results, then use <strong>Download PDF</strong> to export.</p>
 
     <div class="buttons">
       <button id="btnCalc" class="primary">Calculate</button>
@@ -239,6 +251,7 @@
       <div class="kpi">
         <div class="kpi-label">IHS Total</div>
         <div class="kpi-value" id="ihsGbp">-</div>
+        <div class="kpi-sub" id="ihsCalc">-</div>
         <div class="kpi-sub" id="ihsFx">-</div>
       </div>
       <div class="kpi">
@@ -252,7 +265,7 @@
         <div class="kpi-sub" id="fundsAvailFx">-</div>
       </div>
       <div class="kpi">
-        <div class="kpi-label">Gap (Eligible - Required)</div>
+        <div class="kpi-label" id="gapLabel">Gap (Eligible - Required)</div>
         <div class="kpi-value" id="gapGbp">-</div>
         <div class="kpi-sub" id="gapFx">-</div>
       </div>
@@ -271,12 +284,15 @@
     </table>
 
     <h3>Funds Available Breakdown (GBP)</h3>
-    <table class="table" id="fundsAvailBreak">
-      <thead><tr><th>Status</th><th>Account</th><th>Source</th><th>Amount</th><th>Currency (full name)</th><th>FX to GBP</th><th>GBP</th><th>Issues</th></tr></thead>
-      <tbody></tbody>
-    </table>
+    <div class="table-wrap">
+      <table class="table" id="fundsAvailBreak">
+        <thead><tr><th>Status</th><th>Type</th><th>Owner</th><th>Source</th><th>Amount</th><th>Currency</th><th>GBP</th><th>Date</th><th>Issues</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
 
     <div class="note warn" id="validationNote"></div>
+    <div class="note" id="issueSummary" style="display:none"></div>
 
     <div class="note" id="rulesNote"></div>
     <div class="note muted" id="sourcesNote"></div>

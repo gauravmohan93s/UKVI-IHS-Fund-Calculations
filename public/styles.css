@@ -80,6 +80,7 @@ button.secondary{
   border:1px solid var(--line);border-radius:12px;padding:10px 14px;
   background:#ffffff;color:var(--text);cursor:pointer;font-weight:700;
 }
+button:disabled{opacity:.6;cursor:not-allowed}
 .table-actions{display:flex;gap:10px;margin:10px 0}
 .icon-btn{border:1px solid var(--line);background:rgba(231,236,255,.12);color:var(--text);border-radius:10px;padding:6px 10px;cursor:pointer}
 
@@ -87,7 +88,7 @@ button.secondary{
   width:100%; border-collapse:collapse; overflow:hidden; border-radius:12px; border:1px solid var(--line);
 }
 .table th,.table td{padding:10px;border-bottom:1px solid var(--line);font-size:13px}
-.table th{color:var(--muted);font-weight:600;background:rgba(8,12,25,.35)}
+.table th{color:#334155;font-weight:700;background:rgba(15,23,42,.06)}
 .table tr.total td{font-weight:800}
 
 .kpi-grid{
@@ -209,6 +210,8 @@ button.secondary{
 .suggest .item:hover{
   background:linear-gradient(135deg, rgba(34,108,245,.10) 0%, rgba(89,144,247,.10) 100%);
 }
+.table-wrap{overflow-x:auto}
+.muted-field{background:#f8fafc;color:#94a3b8}
 .suggest .title{font-weight:800}
 .suggest .sub{font-size:12px;color:var(--muted);margin-top:2px}
 
