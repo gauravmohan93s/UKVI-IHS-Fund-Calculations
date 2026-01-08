@@ -245,14 +245,15 @@ function formatDateISO(d){
   return d.toISOString().slice(0, 10);
 }
 
-const dateFormatter = new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+const dateFormatter = new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
 const dateTimeFormatter = new Intl.DateTimeFormat("en-IN", {
   day: "2-digit",
   month: "short",
   year: "numeric",
   hour: "numeric",
   minute: "2-digit",
-  hour12: true
+  hour12: true,
+  timeZone: "Asia/Kolkata"
 });
 function formatDateDisplay(value){
   if (!value) return "-";
@@ -432,7 +433,9 @@ async function calcFundsAvailable(payload, rules){
       }
     } else {
       dateLabel = "Statement";
-      dateValue = `${formatDateDisplay(statementStart)} to ${formatDateDisplay(statementEnd)}`;
+      const startLabel = formatDateDisplay(statementStart);
+      const endLabel = formatDateDisplay(statementEnd);
+      dateValue = `${startLabel} - ${endLabel}`;
       const periodDays = dayDiffInclusive(statementStart, statementEnd);
       if (periodDays === null) {
         issues.push("Missing/invalid statement dates");
@@ -867,13 +870,13 @@ app.post("/api/pdf", async (req, res) => {
       const rowH = 9;
       const maxRows = 10;
       const cols = [
-        { title: "OK", width: 22 },
-        { title: "Type", width: 60 },
-        { title: "Owner", width: 60 },
-        { title: "Amount", width: 85 },
-        { title: "GBP", width: 85 },
-        { title: "Date", width: 110 },
-        { title: "Issues", width: pageWidth - (22 + 60 + 60 + 85 + 85 + 110) - 10 },
+        { title: "OK", width: 20 },
+        { title: "Type", width: 70 },
+        { title: "Owner", width: 70 },
+        { title: "Amount", width: 90 },
+        { title: "GBP", width: 90 },
+        { title: "Date", width: 140 },
+        { title: "Issues", width: pageWidth - (20 + 70 + 70 + 90 + 90 + 140) - 10 },
       ];
 
       if (!ensureSpace(headerH + rowH + 4)) return;
@@ -898,17 +901,17 @@ app.post("/api/pdf", async (req, res) => {
         if (!ensureSpace(rowH + 2)) return;
         let cx = margin + 6;
         const okTxt = r.eligible ? "OK" : "NO";
-        doc.fillColor(r.eligible ? "#065f46" : "#9a3412").text(okTxt, cx, y, { width: cols[0].width });
+        doc.fillColor(r.eligible ? "#065f46" : "#9a3412").text(okTxt, cx, y, { width: cols[0].width, align: "center" });
         cx += cols[0].width;
-        doc.fillColor("#0f172a").text(fitText(fundTypeLabel(r.fundType), cols[1].width - 4), cx, y, { width: cols[1].width });
+        doc.fillColor("#0f172a").text(fitText(fundTypeLabel(r.fundType), cols[1].width - 4), cx, y, { width: cols[1].width, align: "center" });
         cx += cols[1].width;
-        doc.text(fitText(r.accountType || "-", cols[2].width - 4), cx, y, { width: cols[2].width });
+        doc.text(fitText(r.accountType || "-", cols[2].width - 4), cx, y, { width: cols[2].width, align: "center" });
         cx += cols[2].width;
-        doc.text(fitText(fmtCurrency(r.currency || "GBP", r.amount || 0), cols[3].width - 4), cx, y, { width: cols[3].width, align: "right" });
+        doc.text(fitText(fmtCurrency(r.currency || "GBP", r.amount || 0), cols[3].width - 4), cx, y, { width: cols[3].width, align: "center" });
         cx += cols[3].width;
-        doc.text(fitText(fmtGBP(r.amountGbp || 0), cols[4].width - 4), cx, y, { width: cols[4].width, align: "right" });
+        doc.text(fitText(fmtGBP(r.amountGbp || 0), cols[4].width - 4), cx, y, { width: cols[4].width, align: "center" });
         cx += cols[4].width;
-        doc.text(fitText(r.dateValue || "-", cols[5].width - 4), cx, y, { width: cols[5].width });
+        doc.text(fitText(r.dateValue || "-", cols[5].width - 4), cx, y, { width: cols[5].width, align: "center" });
         cx += cols[5].width;
         doc.fillColor("#475569").text(fitText((r.issues || []).join("; "), cols[6].width - 4), cx, y, { width: cols[6].width });
         y += rowH;
@@ -1050,13 +1053,7 @@ app.post("/api/pdf", async (req, res) => {
     doc.fillColor("#475569").fontSize(7).text(ruleText, margin, y, { width: pageWidth });
     y += 10;
 
-    if (b.footer_note) {
-      const note = String(b.footer_note);
-      if (pageCount > 1) {
-        doc.switchToPage(0);
-      }
-      doc.fillColor("#64748b").fontSize(7).text(note, margin, doc.page.height - 30, { width: pageWidth, align: "center" });
-    }
+    // PDF footer intentionally omitted per requirements.
 
     doc.end();
   } catch (e) {

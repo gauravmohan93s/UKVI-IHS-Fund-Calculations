@@ -224,6 +224,24 @@ async function searchStudents(query){
   return items;
 }
 
+function getCachedStudentMatches(query){
+  const q = String(query || "").trim().toLowerCase();
+  if (!q || q.length < 2) return [];
+  let best = null;
+  for (const [key, items] of studentCache.entries()){
+    if (!key) continue;
+    const lk = key.toLowerCase();
+    if (q.startsWith(lk) && (!best || lk.length > best.key.length)){
+      best = { key: lk, items };
+    }
+  }
+  if (!best) return [];
+  return best.items.filter((r) =>
+    String(r.ackNumber || "").toLowerCase().includes(q) ||
+    String(r.studentName || "").toLowerCase().includes(q)
+  );
+}
+
 function renderStudentSuggest(items){
   if (!els.studentSuggest) return;
   studentSuggestMap = new Map();
@@ -280,11 +298,13 @@ function initStudentSearch(){
     if (els.studentStatus) els.studentStatus.value = "";
     if (els.studentIntakeYear) els.studentIntakeYear.value = "";
     if (els.studentCityCountry) els.studentCityCountry.value = "";
+    const cached = getCachedStudentMatches(els.studentAck.value);
+    if (cached.length) renderStudentSuggest(cached);
     if (studentSearchTimer) clearTimeout(studentSearchTimer);
     studentSearchTimer = setTimeout(async () => {
       const items = await searchStudents(els.studentAck.value);
       renderStudentSuggest(items);
-    }, 250);
+    }, 120);
   });
   els.studentAck.addEventListener("focus", async () => {
     const items = await searchStudents(els.studentAck.value);
@@ -396,27 +416,15 @@ async function loadConfig(){
   if (els.ratePanel) {
     els.ratePanel.innerHTML = `
       <div class="rate-card">
-        <div class="rate-title">Student maintenance</div>
+        <div class="rate-title">Maintenance rates (per month)</div>
         <div class="rate-list">
-          <div><span class="rate-strong">London:</span> ${fmtMoney("GBP", s.maintenance_monthly_gbp.london)}/month</div>
-          <div><span class="rate-strong">Outside:</span> ${fmtMoney("GBP", s.maintenance_monthly_gbp.outside_london)}/month</div>
+          <div><span class="rate-strong">Student (London):</span> ${fmtMoney("GBP", s.maintenance_monthly_gbp.london)}</div>
+          <div><span class="rate-strong">Student (Outside):</span> ${fmtMoney("GBP", s.maintenance_monthly_gbp.outside_london)}</div>
+          <div><span class="rate-strong">Dependants (London):</span> ${fmtMoney("GBP", s.dependant_monthly_gbp.london)}</div>
+          <div><span class="rate-strong">Dependants (Outside):</span> ${fmtMoney("GBP", s.dependant_monthly_gbp.outside_london)}</div>
+          <div><span class="rate-strong">Child 16–17 (London):</span> ${fmtMoney("GBP", cs.maintenance_monthly_gbp.london)}</div>
+          <div><span class="rate-strong">Child 16–17 (Outside):</span> ${fmtMoney("GBP", cs.maintenance_monthly_gbp.outside_london)}</div>
           <div><span class="rate-strong">Cap:</span> ${s.max_months} months</div>
-        </div>
-      </div>
-      <div class="rate-card">
-        <div class="rate-title">Dependants maintenance</div>
-        <div class="rate-list">
-          <div><span class="rate-strong">London:</span> ${fmtMoney("GBP", s.dependant_monthly_gbp.london)}/month</div>
-          <div><span class="rate-strong">Outside:</span> ${fmtMoney("GBP", s.dependant_monthly_gbp.outside_london)}/month</div>
-          <div><span class="rate-strong">Cap:</span> ${s.max_months} months</div>
-        </div>
-      </div>
-      <div class="rate-card">
-        <div class="rate-title">Child (16–17 independent)</div>
-        <div class="rate-list">
-          <div><span class="rate-strong">London:</span> ${fmtMoney("GBP", cs.maintenance_monthly_gbp.london)}/month</div>
-          <div><span class="rate-strong">Outside:</span> ${fmtMoney("GBP", cs.maintenance_monthly_gbp.outside_london)}/month</div>
-          <div><span class="rate-strong">Cap:</span> ${cs.max_months} months</div>
         </div>
       </div>
       <div class="rate-card">
@@ -564,6 +572,11 @@ if (els.fundsSkip) els.fundsSkip.addEventListener("change", toggleFundsSkip);
 
 async function fx(from, to){
   if (from === to) return 1;
+  if (!fx._cache) fx._cache = new Map();
+  const key = `${from}|${to}`;
+  const cached = fx._cache.get(key);
+  const now = Date.now();
+  if (cached && (now - cached.ts) < 10 * 60 * 1000) return cached.rate;
   const manualEnabled = Boolean(els.useManualFx && els.useManualFx.checked);
   const manualRate = Number(els.manualInrPerGbp && els.manualInrPerGbp.value || 0);
   const manualQuery = (manualEnabled && manualRate > 0)
@@ -576,6 +589,7 @@ async function fx(from, to){
     return 1;
   }
   if (els.fxFallbackNote) els.fxFallbackNote.style.display = "none";
+  fx._cache.set(key, { rate, ts: now });
   return rate;
 }
 
