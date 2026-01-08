@@ -963,6 +963,21 @@ function stableStringify(obj){
   return `{${keys.map(k => `${JSON.stringify(k)}:${stableStringify(obj[k])}`).join(",")}}`;
 }
 
+function sanitizeFilenamePart(val){
+  return String(val || "")
+    .replace(/[^\w\s()-]/g, "")
+    .trim()
+    .replace(/\s+/g, "_");
+}
+
+function buildPdfFilename(){
+  const name = sanitizeFilenamePart((els.studentName && els.studentName.value) || (CURRENT_STUDENT && CURRENT_STUDENT.studentName)) || "Student";
+  const uni = sanitizeFilenamePart(els.universitySelect && els.universitySelect.value) || "University";
+  const intake = sanitizeFilenamePart((els.studentIntakeYear && els.studentIntakeYear.value) || (CURRENT_STUDENT && CURRENT_STUDENT.intakeYear)) || "Intake";
+  const ack = sanitizeFilenamePart((els.studentAck && els.studentAck.value) || (CURRENT_STUDENT && CURRENT_STUDENT.ackNumber)) || "ACK";
+  return `${name}_${uni}_${intake}_(${ack}).pdf`;
+}
+
 async function downloadPdf(){
   const err = validateCore();
   if (err) { alert(err); return; }
@@ -974,7 +989,7 @@ async function downloadPdf(){
     return;
   }
   const blob = await res.blob();
-  const filename = "UK_Visa_IHS_Funds_Report.pdf";
+  const filename = buildPdfFilename();
   if (window.showSaveFilePicker) {
     try {
       const handle = await window.showSaveFilePicker({

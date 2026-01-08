@@ -302,6 +302,21 @@ function formatDateTimeDisplay(value){
   return dateTimeFormatter.format(d);
 }
 
+function sanitizeFilenamePart(val){
+  return String(val || "")
+    .replace(/[^\w\s()-]/g, "")
+    .trim()
+    .replace(/\s+/g, "_");
+}
+
+function buildPdfFilename(payload){
+  const name = sanitizeFilenamePart(payload.studentName) || "Student";
+  const uni = sanitizeFilenamePart(payload.universityName) || "University";
+  const intake = sanitizeFilenamePart(payload.studentIntakeYear) || "Intake";
+  const ack = sanitizeFilenamePart(payload.studentAckNumber) || "ACK";
+  return `${name}_${uni}_${intake}_(${ack}).pdf`;
+}
+
 function calcIHSStudent(visaStart, visaEnd, ihsYearly, ihsHalf, applyingFrom="outside"){
   const months = monthsForIHS(visaStart, visaEnd);
   if (months <= 6) return applyingFrom === "outside" ? 0 : ihsHalf;
@@ -742,7 +757,8 @@ app.post("/api/pdf", async (req, res) => {
     const fmtQuote = (n) => (quote === "GBP" ? fmtGBP(n) : fmtCurrency(quote, n * gbpToQuote));
 
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="UK_Visa_IHS_Funds_Report.pdf"`);
+    const pdfName = buildPdfFilename(payload);
+    res.setHeader("Content-Disposition", `attachment; filename="${pdfName}"`);
 
     const doc = new PDFDocument({ size: "A4", margin: 42 });
     doc.pipe(res);
