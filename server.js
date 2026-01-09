@@ -196,10 +196,18 @@ function formatIst(iso) {
 async function sendTeamsNotification(message) {
   if (!TEAMS_WEBHOOK_URL) return;
   try {
+    const card = {
+      type: "AdaptiveCard",
+      version: "1.4",
+      body: [
+        { type: "TextBlock", text: "KC Data Sync", weight: "Bolder", size: "Medium" },
+        { type: "TextBlock", text: String(message || "-"), wrap: true }
+      ]
+    };
     await fetch(TEAMS_WEBHOOK_URL, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ text: message })
+      body: JSON.stringify(card)
     });
   } catch (e) {
     console.warn(`Teams notify failed: ${e.message || e}`);
