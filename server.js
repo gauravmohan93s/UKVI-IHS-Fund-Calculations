@@ -53,6 +53,9 @@ const COUNTRY_CURRENCY_SOURCE_URL = process.env.COUNTRY_CURRENCY_SOURCE_URL || "
 const STUDENTS_SYNC_MS = Number(process.env.STUDENTS_SYNC_MS || 24 * 60 * 60 * 1000);
 const COUNSELORS_SYNC_MS = Number(process.env.COUNSELORS_SYNC_MS || 20 * 24 * 60 * 60 * 1000);
 const COUNTRY_CURRENCY_SYNC_MS = Number(process.env.COUNTRY_CURRENCY_SYNC_MS || 24 * 60 * 60 * 1000);
+const STUDENTS_SYNC_MIN_AGE_MINUTES = Number(process.env.STUDENTS_SYNC_MIN_AGE_MINUTES || 0);
+const COUNSELORS_SYNC_MIN_AGE_MINUTES = Number(process.env.COUNSELORS_SYNC_MIN_AGE_MINUTES || 0);
+const COUNTRY_CURRENCY_SYNC_MIN_AGE_MINUTES = Number(process.env.COUNTRY_CURRENCY_SYNC_MIN_AGE_MINUTES || 0);
 const TEAMS_WEBHOOK_URL = process.env.TEAMS_WEBHOOK_URL || "";
 const APP_VERSION = "2.3.0";
 
@@ -279,13 +282,19 @@ async function downloadToFile(name, url, destPath) {
   }
 }
 
-function scheduleSync(name, url, destPath, intervalMs) {
+function scheduleSync(name, url, destPath, intervalMs, minAgeMinutes = 0) {
   if (!DATA_SYNC_ENABLED) return;
   if (!url) return;
   if (!Number.isFinite(intervalMs) || intervalMs <= 0) return;
+  const minAgeMs = Number.isFinite(minAgeMinutes) && minAgeMinutes > 0 ? minAgeMinutes * 60 * 1000 : 0;
+  const run = () => {
+    if (shouldSync(name, destPath, minAgeMs)) {
+      downloadToFile(name, url, destPath);
+    }
+  };
   console.log(`Sync enabled for ${name} every ${Math.round(intervalMs / 60000)}m`);
-  downloadToFile(name, url, destPath);
-  const timer = setInterval(() => downloadToFile(name, url, destPath), intervalMs);
+  run();
+  const timer = setInterval(run, intervalMs);
   if (timer.unref) timer.unref();
 }
 
@@ -293,6 +302,22 @@ function fileStatus(pathname) {
   if (!fs.existsSync(pathname)) return { exists: false, updatedAt: "" };
   const stat = fs.statSync(pathname);
   return { exists: true, updatedAt: new Date(stat.mtimeMs).toISOString() };
+}
+
+function getLastSuccess(name, pathname) {
+  const meta = syncMeta.get(name);
+  if (meta?.lastSuccessAt) return meta.lastSuccessAt;
+  const status = fileStatus(pathname);
+  return status.updatedAt || "";
+}
+
+function shouldSync(name, pathname, minAgeMs) {
+  if (!Number.isFinite(minAgeMs) || minAgeMs <= 0) return true;
+  const last = getLastSuccess(name, pathname);
+  if (!last) return true;
+  const lastMs = new Date(last).getTime();
+  if (!Number.isFinite(lastMs)) return true;
+  return (Date.now() - lastMs) >= minAgeMs;
 }
 
 // --- FX cache (daily) ---
@@ -792,31 +817,49 @@ app.get("/api/sync-status", (req, res) => {
 
 app.post("/api/sync", async (req, res) => {
   try {
-    const targetsRaw = normalizeStr(req.query.targets || "all").toLowerCase();
+    const targetsRaw = normalizeStr(req.query.targets || "all").toLowerCase();  
     const wantAll = targetsRaw === "all";
     const wants = new Set(targetsRaw.split(",").map((t) => t.trim()).filter(Boolean));
+    const minAgeMinutes = Number(req.query.min_age_minutes || 0);
+    const minAgeMs = Number.isFinite(minAgeMinutes) && minAgeMinutes > 0 ? minAgeMinutes * 60 * 1000 : 0;
     const tasks = [];
     const picked = [];
+    const skipped = [];
 
     if (STUDENTS_SOURCE_URL && (wantAll || wants.has("students"))) {
-      tasks.push(downloadToFile("students", STUDENTS_SOURCE_URL, STUDENTS_XLSX_PATH));
-      picked.push("students");
+      if (shouldSync("students", STUDENTS_XLSX_PATH, minAgeMs)) {
+        tasks.push(downloadToFile("students", STUDENTS_SOURCE_URL, STUDENTS_XLSX_PATH));
+        picked.push("students");
+      } else {
+        skipped.push("students");
+      }
     }
     if (COUNSELORS_SOURCE_URL && (wantAll || wants.has("counselors"))) {
-      tasks.push(downloadToFile("counselors", COUNSELORS_SOURCE_URL, COUNSELORS_CSV_PATH));
-      picked.push("counselors");
+      if (shouldSync("counselors", COUNSELORS_CSV_PATH, minAgeMs)) {
+        tasks.push(downloadToFile("counselors", COUNSELORS_SOURCE_URL, COUNSELORS_CSV_PATH));
+        picked.push("counselors");
+      } else {
+        skipped.push("counselors");
+      }
     }
     if (COUNTRY_CURRENCY_SOURCE_URL && (wantAll || wants.has("country_currency"))) {
-      tasks.push(downloadToFile("country_currency", COUNTRY_CURRENCY_SOURCE_URL, COUNTRY_CURRENCY_PATH));
-      picked.push("country_currency");
+      if (shouldSync("country_currency", COUNTRY_CURRENCY_PATH, minAgeMs)) {
+        tasks.push(downloadToFile("country_currency", COUNTRY_CURRENCY_SOURCE_URL, COUNTRY_CURRENCY_PATH));
+        picked.push("country_currency");
+      } else {
+        skipped.push("country_currency");
+      }
     }
 
     if (!tasks.length) {
+      if (skipped.length) {
+        return res.json({ ok: true, targets: [], skipped, min_age_minutes: minAgeMinutes });
+      }
       return res.status(400).json({ error: "No valid sync targets configured." });
     }
 
     await Promise.all(tasks);
-    return res.json({ ok: true, targets: picked });
+    return res.json({ ok: true, targets: picked, skipped, min_age_minutes: minAgeMinutes });
   } catch (e) {
     return res.status(500).json({ error: String(e) });
   }
@@ -1320,9 +1363,9 @@ app.get("/healthz", (req, res) => res.json({ ok: true, ts: new Date().toISOStrin
 
 app.get("/health", (req, res) => res.json({ ok: true }));
 
-scheduleSync("students", STUDENTS_SOURCE_URL, STUDENTS_XLSX_PATH, STUDENTS_SYNC_MS);
-scheduleSync("counselors", COUNSELORS_SOURCE_URL, COUNSELORS_CSV_PATH, COUNSELORS_SYNC_MS);
-scheduleSync("country_currency", COUNTRY_CURRENCY_SOURCE_URL, COUNTRY_CURRENCY_PATH, COUNTRY_CURRENCY_SYNC_MS);
+scheduleSync("students", STUDENTS_SOURCE_URL, STUDENTS_XLSX_PATH, STUDENTS_SYNC_MS, STUDENTS_SYNC_MIN_AGE_MINUTES);
+scheduleSync("counselors", COUNSELORS_SOURCE_URL, COUNSELORS_CSV_PATH, COUNSELORS_SYNC_MS, COUNSELORS_SYNC_MIN_AGE_MINUTES);
+scheduleSync("country_currency", COUNTRY_CURRENCY_SOURCE_URL, COUNTRY_CURRENCY_PATH, COUNTRY_CURRENCY_SYNC_MS, COUNTRY_CURRENCY_SYNC_MIN_AGE_MINUTES);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));

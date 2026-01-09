@@ -42,6 +42,7 @@ Optional env vars:
 - `DATA_SYNC_ENABLED=true|false` (default: true)
 - `STUDENTS_SOURCE_URL`, `COUNSELORS_SOURCE_URL`, `COUNTRY_CURRENCY_SOURCE_URL`
 - `STUDENTS_SYNC_MS`, `COUNSELORS_SYNC_MS`, `COUNTRY_CURRENCY_SYNC_MS`
+- `STUDENTS_SYNC_MIN_AGE_MINUTES`, `COUNSELORS_SYNC_MIN_AGE_MINUTES`, `COUNTRY_CURRENCY_SYNC_MIN_AGE_MINUTES`
 - `TEAMS_WEBHOOK_URL` (send sync status to Teams/Power Automate)
 
 The app always serves from local files (`data/students.xlsx`, `data/counselors.csv`,
@@ -52,6 +53,12 @@ To trigger a manual sync (useful for Render cron), call:
 curl -X POST "https://<your-app>.onrender.com/api/sync?targets=students"
 ```
 If access control is enabled, send `X-Access-Code` header.
+
+Optional: avoid redundant syncs when multiple schedulers are used:
+```bash
+curl -X POST "https://<your-app>.onrender.com/api/sync?targets=students&min_age_minutes=30"
+```
+This skips the sync if the last successful update is newer than the threshold.
 
 
 ## 28-day validator
