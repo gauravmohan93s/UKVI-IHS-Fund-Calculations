@@ -972,13 +972,18 @@ app.post("/api/pdf", async (req, res) => {
     const ok = gapEligible >= 0;
 
     // Quote currency for client-friendly display
-    const quote = String(payload.quoteCurrency || "GBP").toUpperCase();
+    let quote = String(payload.quoteCurrency || "GBP").toUpperCase();
     let gbpToQuote = 1;
+    let fxAvailable = true;
     if (quote !== "GBP") {
       try {
         const fx = await getFx("GBP", quote, payload.manualFx);
-        gbpToQuote = Number(fx?.rates?.[quote]) || 1;
+        const rate = Number(fx?.rates?.[quote]) || 0;
+        if (!rate) throw new Error("FX unavailable");
+        gbpToQuote = rate;
       } catch (_) {
+        fxAvailable = false;
+        quote = "GBP";
         gbpToQuote = 1;
       }
     }
@@ -1062,17 +1067,10 @@ app.post("/api/pdf", async (req, res) => {
       doc.fontSize(9).text(b.company_name || "", margin, 34, { width: pageWidth, align: "center" });
       const fxStamp = lastFxFetchedAt ? `FX: ${formatDateTimeDisplay(lastFxFetchedAt)}` : "FX: -";
       const metaStamp = `v${APP_VERSION} | ${fxStamp}`;
-      doc.fontSize(8).fillColor("#073344")
-        .text(`Generated: ${formatDateTimeDisplay(new Date())} - Mode: ${pdfMode === "client" ? "Client" : "Internal"}`, margin, headerHeight - 22, { width: pageWidth, align: "right" });
-      doc.fontSize(8).fillColor("#073344")
+      doc.fontSize(8).fillColor("#e2e8f0")
+        .text(`Generated: ${formatDateTimeDisplay(new Date())}`, margin, headerHeight - 22, { width: pageWidth, align: "right" });
+      doc.fontSize(8).fillColor("#e2e8f0")
         .text(metaStamp, margin, headerHeight - 10, { width: pageWidth, align: "right" });
-
-      const stampText = ok ? "ELIGIBLE" : "NOT ELIGIBLE";
-      doc.save();
-      doc.rotate(-18, { origin: [470, 120] });
-      doc.fontSize(26).fillColor(ok ? "#16a34a" : "#dc2626").opacity(0.18)
-        .text(stampText, 360, 95, { width: 200, align: "center" });
-      doc.opacity(1).restore();
 
       return headerHeight + 14;
     };
@@ -1111,15 +1109,38 @@ app.post("/api/pdf", async (req, res) => {
     };
 
     const measureKeyValueBoxHeight = (rows, w, labelRatio = 0.58) => {
-      const headerH = 18;
+      const headerH = 14;
       const paddingX = 10;
       const labelW = Math.floor((w - paddingX * 2) * labelRatio);
       const valueW = (w - paddingX * 2) - labelW;
       let height = headerH + 6;
       rows.forEach((row) => {
         const label = String(row.label ?? "-");
+        if (row.section) {
+          doc.fontSize(8);
+          const sh = doc.heightOfString(label, { width: w - paddingX * 2 });
+          height += sh + 6;
+          return;
+        }
         const value = String(row.value ?? "-");
+        doc.fontSize(7);
         const lh = doc.heightOfString(label, { width: labelW });
+        if (row.valueParts && row.valueParts.singleLine) {
+          doc.fontSize(9);
+          const vh = doc.heightOfString(row.valueParts.primary || "-", { width: valueW, align: "right" });
+          height += Math.max(lh, vh) + 4;
+          return;
+        }
+        if (value.includes("\n")) {
+          const [v1, v2] = value.split("\n");
+          doc.fontSize(9);
+          const h1 = doc.heightOfString(v1 || "-", { width: valueW, align: "right" });
+          doc.fontSize(8);
+          const h2 = doc.heightOfString(v2 || "-", { width: valueW, align: "right" });
+          height += Math.max(lh, h1 + h2 + 2) + 4;
+          return;
+        }
+        doc.fontSize(9);
         const vh = doc.heightOfString(value, { width: valueW, align: "right" });
         height += Math.max(lh, vh) + 4;
       });
@@ -1129,17 +1150,53 @@ app.post("/api/pdf", async (req, res) => {
     const drawKeyValueBox = (x, boxY, w, h, title, rows, labelRatio = 0.58) => {
       doc.roundedRect(x, boxY, w, h, 8).fill("#f8fafc");
       doc.strokeColor("#e2e8f0").lineWidth(1).roundedRect(x, boxY, w, h, 8).stroke();
-      doc.fillColor("#0f172a").fontSize(10).text(title, x + 10, boxY + 6);
+      doc.fillColor("#0f172a").fontSize(10).text(title, x + 10, boxY + 4, { width: w - 20, align: "left" });
 
       const paddingX = 10;
-      const headerH = 18;
+      const headerH = 14;
       const labelW = Math.floor((w - paddingX * 2) * labelRatio);
       const valueW = (w - paddingX * 2) - labelW;
       let ry = boxY + headerH;
       rows.forEach((row) => {
         const label = String(row.label ?? "-");
+        if (row.section) {
+          doc.fontSize(8).fillColor("#334155").text(label, x + paddingX, ry, { width: w - paddingX * 2, align: "right" });
+          const sh = doc.heightOfString(label, { width: w - paddingX * 2 });
+          ry += sh + 4;
+          doc.strokeColor("#e2e8f0").lineWidth(0.5).moveTo(x + paddingX, ry).lineTo(x + w - paddingX, ry).stroke();
+          ry += 4;
+          return;
+        }
         const value = String(row.value ?? "-");
         doc.fontSize(7).fillColor("#64748b").text(label, x + paddingX, ry, { width: labelW });
+        if (row.valueParts && row.valueParts.singleLine) {
+          const primary = String(row.valueParts.primary || "-");
+          const secondary = String(row.valueParts.secondary || "-");
+          const sep = " | ";
+          doc.fontSize(9);
+          const w1 = doc.widthOfString(primary);
+          doc.fontSize(8);
+          const w2 = doc.widthOfString(secondary);
+          const wSep = doc.widthOfString(sep);
+          const totalW = w1 + wSep + w2;
+          const startX = x + paddingX + labelW + Math.max(0, valueW - totalW);
+          doc.fontSize(9).fillColor(row.valueColor || "#0f172a").text(primary, startX, ry, { lineBreak: false });
+          doc.fontSize(8).fillColor("#64748b").text(sep + secondary, startX + w1, ry, { lineBreak: false });
+          const lh = doc.heightOfString(label, { width: labelW });
+          const vh = doc.heightOfString(primary, { width: valueW, align: "right" });
+          ry += Math.max(lh, vh) + 4;
+          return;
+        }
+        if (value.includes("\n")) {
+          const [v1, v2] = value.split("\n");
+          doc.fontSize(9).fillColor(row.valueColor || "#0f172a").text(v1 || "-", x + paddingX + labelW, ry, { width: valueW, align: "right" });
+          const h1 = doc.heightOfString(v1 || "-", { width: valueW, align: "right" });
+          doc.fontSize(8).fillColor("#64748b").text(v2 || "-", x + paddingX + labelW, ry + h1 + 2, { width: valueW, align: "right" });
+          const h2 = doc.heightOfString(v2 || "-", { width: valueW, align: "right" });
+          const lh = doc.heightOfString(label, { width: labelW });
+          ry += Math.max(lh, h1 + h2 + 2) + 4;
+          return;
+        }
         doc.fontSize(9).fillColor(row.valueColor || "#0f172a").text(value, x + paddingX + labelW, ry, { width: valueW, align: "right" });
         const lh = doc.heightOfString(label, { width: labelW });
         const vh = doc.heightOfString(value, { width: valueW, align: "right" });
@@ -1189,15 +1246,14 @@ app.post("/api/pdf", async (req, res) => {
     const drawFundsTable = (rows) => {
       const headerH = 14;
       const rowH = 9;
-      const maxRows = 10;
       const cols = [
-        { title: "OK", width: 20 },
-        { title: "Type", width: 70 },
-        { title: "Owner", width: 70 },
-        { title: "Amount", width: 90 },
-        { title: "GBP", width: 90 },
-        { title: "Date", width: 140 },
-        { title: "Issues", width: pageWidth - (20 + 70 + 70 + 90 + 90 + 140) - 10 },
+        { title: "OK", width: 20, align: "center" },
+        { title: "Type", width: 60, align: "center" },
+        { title: "Owner", width: 60, align: "center" },
+        { title: "Amount", width: 80, align: "center" },
+        { title: "GBP", width: 80, align: "center" },
+        { title: "Date", width: 90, align: "center" },
+        { title: "Issues", width: pageWidth - (20 + 60 + 60 + 80 + 80 + 90) - 10, align: "left" },
       ];
 
       if (!ensureSpace(headerH + rowH + 4)) return;
@@ -1205,7 +1261,7 @@ app.post("/api/pdf", async (req, res) => {
       doc.fillColor("#334155").fontSize(7);
       let x = margin + 6;
       cols.forEach((c) => {
-        doc.text(c.title, x, y + 4, { width: c.width });
+        doc.text(c.title, x, y + 4, { width: c.width, align: c.align || "left" });
         x += c.width;
       });
       y += headerH + 2;
@@ -1218,24 +1274,35 @@ app.post("/api/pdf", async (req, res) => {
       };
 
       doc.fontSize(7);
-      rows.slice(0, maxRows).forEach((r) => {
-        if (!ensureSpace(rowH + 2)) return;
-        let cx = margin + 6;
+      rows.forEach((r) => {
         const okTxt = r.eligible ? "OK" : "NO";
-        doc.fillColor(r.eligible ? "#065f46" : "#9a3412").text(okTxt, cx, y, { width: cols[0].width, align: "center" });
-        cx += cols[0].width;
-        doc.fillColor("#0f172a").text(fitText(fundTypeLabel(r.fundType), cols[1].width - 4), cx, y, { width: cols[1].width, align: "center" });
-        cx += cols[1].width;
-        doc.text(fitText(r.accountType || "-", cols[2].width - 4), cx, y, { width: cols[2].width, align: "center" });
-        cx += cols[2].width;
-        doc.text(fitText(fmtCurrency(r.currency || "GBP", r.amount || 0), cols[3].width - 4), cx, y, { width: cols[3].width, align: "center" });
-        cx += cols[3].width;
-        doc.text(fitText(fmtGBP(r.amountGbp || 0), cols[4].width - 4), cx, y, { width: cols[4].width, align: "center" });
-        cx += cols[4].width;
-        doc.text(fitText(r.dateValue || "-", cols[5].width - 4), cx, y, { width: cols[5].width, align: "center" });
-        cx += cols[5].width;
-        doc.fillColor("#475569").text(fitText((r.issues || []).join("; "), cols[6].width - 4), cx, y, { width: cols[6].width });
-        y += rowH;
+        const issuesText = (r.issues || []).join("; ") || "-";
+        const dateText = r.dateValue || "-";
+        const cells = [
+          { text: okTxt, width: cols[0].width, align: cols[0].align, color: r.eligible ? "#065f46" : "#9a3412" },
+          { text: fundTypeLabel(r.fundType), width: cols[1].width, align: cols[1].align, color: "#0f172a" },
+          { text: r.accountType || "-", width: cols[2].width, align: cols[2].align, color: "#0f172a" },
+          { text: fmtCurrency(r.currency || "GBP", r.amount || 0), width: cols[3].width, align: cols[3].align, color: "#0f172a" },
+          { text: fmtGBP(r.amountGbp || 0), width: cols[4].width, align: cols[4].align, color: "#0f172a" },
+          { text: dateText, width: cols[5].width, align: cols[5].align, color: "#0f172a" },
+          { text: issuesText, width: cols[6].width, align: cols[6].align, color: "#475569" },
+        ];
+
+        const heights = cells.map((c) =>
+          doc.heightOfString(String(c.text || "-"), { width: c.width - 4, align: c.align })
+        );
+        const rowHeight = Math.max(rowH, ...heights) + 2;
+        if (!ensureSpace(rowHeight + 2)) return;
+
+        let cx = margin + 6;
+        cells.forEach((c) => {
+          doc.fillColor(c.color || "#0f172a").text(String(c.text || "-"), cx, y, {
+            width: c.width - 2,
+            align: c.align
+          });
+          cx += c.width;
+        });
+        y += rowHeight;
       });
     };
 
@@ -1252,7 +1319,7 @@ app.post("/api/pdf", async (req, res) => {
       { label: "Study location", value: normalizeRegion(payload.region || "outside_london") === "london" ? "London" : "Outside London" },
       { label: "Course dates", value: courseDates },
       { label: "Visa application", value: formatDateDisplay(payload.applicationDate) },
-      { label: "Display currency", value: quote },
+      { label: "Display currency", value: fxAvailable ? quote : "GBP (FX unavailable)" },
     ];
     const studentRows = [
       { label: "Acknowledgement No", value: payload.studentAckNumber || "-" },
@@ -1289,41 +1356,50 @@ app.post("/api/pdf", async (req, res) => {
 
     const rowTop2 = y;
     const visaFeeGbp = safeNum(config.fees?.visa_application_fee_gbp);
+    const dual = (n) => `${fmtGBP(n)}\n${fmtQuote(n)}`;
+    const dualInline = (n) => ({ primary: fmtGBP(n), secondary: fmtQuote(n), singleLine: true });
     const feesRows = [
-      { label: "Tuition total", value: `${fmtGBP(safeNum(payload.tuitionFeeTotalGbp))} (${fmtQuote(safeNum(payload.tuitionFeeTotalGbp))})` },
-      { label: "Tuition paid", value: `${fmtGBP(safeNum(payload.tuitionFeePaidGbp))} (${fmtQuote(safeNum(payload.tuitionFeePaidGbp))})` },
-      { label: "Scholarship", value: `${fmtGBP(safeNum(payload.scholarshipGbp))} (${fmtQuote(safeNum(payload.scholarshipGbp))})` },
-      { label: "Buffer", value: `${fmtGBP(safeNum(payload.bufferGbp))} (${fmtQuote(safeNum(payload.bufferGbp))})` },
-      { label: "Visa application fee", value: `${fmtGBP(visaFeeGbp)} (${fmtQuote(visaFeeGbp)})` },
+      { section: true, label: "Fees" },
+      { label: "Tuition total", valueParts: dualInline(safeNum(payload.tuitionFeeTotalGbp)) },
+      { label: "Tuition paid", valueParts: dualInline(safeNum(payload.tuitionFeePaidGbp)) },
+      { label: "Scholarship", valueParts: dualInline(safeNum(payload.scholarshipGbp)) },
+      { label: "Buffer", valueParts: dualInline(safeNum(payload.bufferGbp)) },
+      { section: true, label: "Visa" },
+      { label: "Visa application fee", valueParts: dualInline(visaFeeGbp) },
+      { section: true, label: "IHS" },
       { label: "Visa end date", value: formatDateDisplay(ihs.visaEndDate) },
       { label: "Total stay", value: `${ihs.totalStayMonths} months (${ihs.totalStayDays} days)` },
       { label: "IHS calculation", value: ihsCalcText },
-      { label: "IHS total", value: `${fmtGBP(ihs.ihsTotalGbp)} (${fmtQuote(ihs.ihsTotalGbp)})` },
+      { label: "IHS total", valueParts: dualInline(ihs.ihsTotalGbp) },
     ];
     const fundsReqRows = [
-      { label: "Tuition due", value: `${fmtGBP(fundsReq.tuitionDueGbp)} (${fmtQuote(fundsReq.tuitionDueGbp)})` },
-      { label: "Maintenance (student)", value: `${fmtGBP(fundsReq.maintenanceStudentGbp)} (${fmtQuote(fundsReq.maintenanceStudentGbp)})` },
-      { label: "Maintenance (dependants)", value: `${fmtGBP(fundsReq.maintenanceDependantsGbp)} (${fmtQuote(fundsReq.maintenanceDependantsGbp)})` },
-      { label: "Buffer", value: `${fmtGBP(fundsReq.bufferGbp)} (${fmtQuote(fundsReq.bufferGbp)})` },
+      { label: "Tuition due", value: dual(fundsReq.tuitionDueGbp) },
+      { label: "Maintenance (student)", value: dual(fundsReq.maintenanceStudentGbp) },
+      { label: "Maintenance (dependants)", value: dual(fundsReq.maintenanceDependantsGbp) },
+      { label: "Buffer", value: dual(fundsReq.bufferGbp) },
     ];
     const feesH = measureKeyValueBoxHeight(feesRows, halfWidth);
     const fundsReqH = measureKeyValueBoxHeight(fundsReqRows, halfWidth);
 
     const gapLabel = gapEligible >= 0 ? "Funds are sufficient" : "Additional funds required";
     const gapValue = gapEligible >= 0 ? fmtGBP(gapEligible) : fmtGBP(Math.abs(gapEligible));
-    const gapValueQuote = quote === "GBP" ? "" : ` | ${gapEligible >= 0 ? fmtQuote(gapEligible) : fmtQuote(Math.abs(gapEligible))}`;
+    const gapValueQuote = gapEligible >= 0 ? fmtQuote(gapEligible) : fmtQuote(Math.abs(gapEligible));
     const totalsRows = [
-      { label: "Total required", value: `${fmtGBP(fundsReq.fundsRequiredGbp)} (${fmtQuote(fundsReq.fundsRequiredGbp)})` },
-      { label: "Eligible funds", value: `${fmtGBP(fundsAvail.summary.totalEligibleGbp)} (${fmtQuote(fundsAvail.summary.totalEligibleGbp)})` },
-      { label: gapLabel, value: `${gapValue}${gapValueQuote}`, valueColor: gapEligible >= 0 ? "#166534" : "#b91c1c" },
+      { label: "Total required", value: dual(fundsReq.fundsRequiredGbp) },
+      { label: "Eligible funds", value: dual(fundsAvail.summary.totalEligibleGbp) },
+      { label: gapLabel, value: `${gapValue}\n${gapValueQuote}`, valueColor: gapEligible >= 0 ? "#166534" : "#b91c1c" },
     ];
     const totalsH = measureKeyValueBoxHeight(totalsRows, halfWidth, 0.5);
 
     if (ensureSpace(Math.max(feesH, fundsReqH + totalsH + 8))) {
-      drawKeyValueBox(margin, rowTop2, halfWidth, feesH, "Fees, IHS & Visa fee", feesRows, 0.5);
+      drawKeyValueBox(margin, rowTop2, halfWidth, feesH, "Fees, IHS & Visa", feesRows, 0.5);
+      const rightTotalH = fundsReqH + totalsH + 8;
+      const targetH = Math.max(feesH, rightTotalH);
+      const extra = Math.max(0, targetH - rightTotalH);
+      const totalsHAdj = totalsH + extra;
       drawKeyValueBox(margin + halfWidth + colGap, rowTop2, halfWidth, fundsReqH, "Funds required (28-day)", fundsReqRows, 0.5);
-      drawKeyValueBox(margin + halfWidth + colGap, rowTop2 + fundsReqH + 8, halfWidth, totalsH, "Totals", totalsRows, 0.5);
-      y = rowTop2 + Math.max(feesH, fundsReqH + totalsH + 8) + 8;
+      drawKeyValueBox(margin + halfWidth + colGap, rowTop2 + fundsReqH + 8, halfWidth, totalsHAdj, "Totals", totalsRows, 0.5);
+      y = rowTop2 + targetH + 8;
     }
 
     if (!fundsAvail.summary.skipped) {

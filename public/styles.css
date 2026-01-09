@@ -247,6 +247,15 @@ button:disabled{opacity:.6;cursor:not-allowed}
 }
 .table-wrap{overflow-x:auto}
 .table-wide{min-width:1200px}
+#fundsAvailBreak{table-layout:fixed}
+#fundsAvailBreak th,#fundsAvailBreak td{vertical-align:top}
+#fundsAvailBreak th:nth-child(8),
+#fundsAvailBreak td:nth-child(8),
+#fundsAvailBreak th:nth-child(9),
+#fundsAvailBreak td:nth-child(9){
+  white-space:normal;
+  word-break:break-word;
+}
 #fundsTable th:nth-child(1){min-width:160px}
 #fundsTable th:nth-child(2){min-width:140px}
 #fundsTable th:nth-child(3){min-width:220px}

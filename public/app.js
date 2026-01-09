@@ -667,7 +667,7 @@ async function fx(from, to){
   const rate = Number(out.rate);
   if (!Number.isFinite(rate) || rate <= 0) {
     if (els.fxFallbackNote) els.fxFallbackNote.style.display = "block";
-    return 1;
+    return null;
   }
   if (els.fxFallbackNote) els.fxFallbackNote.style.display = "none";
   fx._cache.set(key, { rate, ts: now });
@@ -827,8 +827,12 @@ async function calculateInternal(allowAlert){
 }
 
 async function renderReport(out, body){
-  const quote = els.quote.value;
-  const gbpToQuote = await fx("GBP", quote);
+  let quote = els.quote.value;
+  let gbpToQuote = await fx("GBP", quote);
+  if (!gbpToQuote) {
+    quote = "GBP";
+    gbpToQuote = 1;
+  }
 
   const gapEligible = Number(out.gapEligibleOnlyGbp) || 0;
   const gapLabel = gapEligible >= 0 ? "Funds are sufficient" : "Additional funds required";
