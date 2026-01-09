@@ -44,6 +44,7 @@ Optional env vars:
 - `STUDENTS_SYNC_MS`, `COUNSELORS_SYNC_MS`, `COUNTRY_CURRENCY_SYNC_MS`
 - `STUDENTS_SYNC_MIN_AGE_MINUTES`, `COUNSELORS_SYNC_MIN_AGE_MINUTES`, `COUNTRY_CURRENCY_SYNC_MIN_AGE_MINUTES`
 - `TEAMS_WEBHOOK_URL` (send sync status to Teams/Power Automate)
+- `FX_FALLBACK_URL` (override FX fallback provider, default: open.er-api.com)
 
 The app always serves from local files (`data/students.xlsx`, `data/counselors.csv`,
 `data/country_currency.json`) and refreshes them in the background.

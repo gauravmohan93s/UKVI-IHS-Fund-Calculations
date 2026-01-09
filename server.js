@@ -331,6 +331,7 @@ function shouldSync(name, pathname, minAgeMs) {
 // --- FX cache (daily) ---
 const fxCache = new Map(); // key => data
 const FX_TIMEOUT_MS = Number(process.env.FX_TIMEOUT_MS || 20000);
+const FX_FALLBACK_URL = process.env.FX_FALLBACK_URL || "https://open.er-api.com/v6/latest";
 let lastFxFetchedAt = null;
 function todayKey() { return new Date().toISOString().slice(0, 10); }
 
@@ -344,6 +345,16 @@ async function getFx(from, toCsv, manualFx) {
     const data = await fetchJson(url, FX_TIMEOUT_MS);
     data.fetchedAt = new Date().toISOString();
     lastFxFetchedAt = data.fetchedAt;
+    data.fxSource = "frankfurter.app";
+    fxCache.set(key, data);
+    return data;
+  };
+  const attemptFallback = async () => {
+    const fbUrl = `${FX_FALLBACK_URL}/${encodeURIComponent(from)}`;
+    const data = await fetchJson(fbUrl, FX_TIMEOUT_MS);
+    data.fetchedAt = new Date().toISOString();
+    lastFxFetchedAt = data.fetchedAt;
+    data.fxSource = "open.er-api.com";
     fxCache.set(key, data);
     return data;
   };
@@ -361,11 +372,24 @@ async function getFx(from, toCsv, manualFx) {
     return null;
   };
 
+  const validateRate = (data) => {
+    const rate = safeNum(data?.rates?.[toCsv]);
+    return Number.isFinite(rate) && rate > 0;
+  };
+
   try {
-    return await attempt();
+    const data = await attempt();
+    if (validateRate(data)) return data;
+    throw new Error("FX rate unavailable");
   } catch (e) {
     const override = tryManualOverride();
     if (override) return override;
+    try {
+      const fallback = await attemptFallback();
+      if (validateRate(fallback)) return fallback;
+    } catch (_) {
+      // ignore fallback error
+    }
     // Manual FX fallback (INR-GBP only)
     const enabled = Boolean(manualFx && manualFx.enabled);
     const inrPerGbp = Number((manualFx && manualFx.inrPerGbp) || 0);
@@ -379,12 +403,7 @@ async function getFx(from, toCsv, manualFx) {
         return { rates: { INR: inrPerGbp }, base: "GBP", date: null, fetchedAt: new Date().toISOString(), fxSource: "manual" };
       }
     }
-
-    try {
-      return await attempt();
-    } catch (e2) {
-      throw new Error("FX rates could not be fetched (timeout). Please check internet/firewall or use the optional INR per GBP override.");
-    }
+    return null;
   }
 }
 
@@ -606,6 +625,7 @@ async function calcFundsAvailable(payload, rules){
 
     if (amount <= 0) continue;
 
+    const issues = [];
     // FX convert
     let gbp = amount;
     let rate = 1;
@@ -625,7 +645,6 @@ async function calcFundsAvailable(payload, rules){
     totalAllGbp += gbp;
 
     // eligibility checks
-    const issues = [];
     let dateLabel = "";
     let dateValue = "";
 
