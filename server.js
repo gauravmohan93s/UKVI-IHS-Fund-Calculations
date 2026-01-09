@@ -46,6 +46,14 @@ const CONFIG_URL = process.env.CONFIG_URL || ""; // optional remote JSON
 const STUDENTS_XLSX_PATH = process.env.STUDENTS_XLSX_PATH || path.join(__dirname, "data", "students.xlsx");
 const COUNSELORS_CSV_PATH = process.env.COUNSELORS_CSV_PATH || path.join(__dirname, "data", "counselors.csv");
 const COUNTRY_CURRENCY_PATH = path.join(__dirname, "data", "country_currency.json");
+const DATA_SYNC_ENABLED = String(process.env.DATA_SYNC_ENABLED || "true").toLowerCase() === "true";
+const STUDENTS_SOURCE_URL = process.env.STUDENTS_SOURCE_URL || "";
+const COUNSELORS_SOURCE_URL = process.env.COUNSELORS_SOURCE_URL || "";
+const COUNTRY_CURRENCY_SOURCE_URL = process.env.COUNTRY_CURRENCY_SOURCE_URL || "";
+const STUDENTS_SYNC_MS = Number(process.env.STUDENTS_SYNC_MS || 24 * 60 * 60 * 1000);
+const COUNSELORS_SYNC_MS = Number(process.env.COUNSELORS_SYNC_MS || 20 * 24 * 60 * 60 * 1000);
+const COUNTRY_CURRENCY_SYNC_MS = Number(process.env.COUNTRY_CURRENCY_SYNC_MS || 24 * 60 * 60 * 1000);
+const TEAMS_WEBHOOK_URL = process.env.TEAMS_WEBHOOK_URL || "";
 const APP_VERSION = "2.3.0";
 
 function readLocalConfig() {
@@ -164,6 +172,127 @@ async function fetchJson(url, timeoutMs = 8000) {
   } finally {
     clearTimeout(t);
   }
+}
+
+const syncState = new Map();
+const syncMeta = new Map();
+function formatIst(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const fmt = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+  return `${fmt.format(d)} IST`;
+}
+async function sendTeamsNotification(message) {
+  if (!TEAMS_WEBHOOK_URL) return;
+  try {
+    await fetch(TEAMS_WEBHOOK_URL, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text: message })
+    });
+  } catch (e) {
+    console.warn(`Teams notify failed: ${e.message || e}`);
+  }
+}
+async function fetchBinary(url, timeoutMs = 15000) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  const state = syncState.get(url) || {};
+  try {
+    const headers = {};
+    if (state.etag) headers["if-none-match"] = state.etag;
+    if (state.lastModified) headers["if-modified-since"] = state.lastModified;
+    const res = await fetch(url, { signal: ctrl.signal, headers });
+    if (res.status === 304) return { notModified: true };
+    if (!res.ok) throw new Error(`Fetch failed (${res.status})`);
+    const arrayBuffer = await res.arrayBuffer();
+    return {
+      buffer: Buffer.from(arrayBuffer),
+      etag: res.headers.get("etag") || "",
+      lastModified: res.headers.get("last-modified") || ""
+    };
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+async function downloadToFile(name, url, destPath) {
+  const state = syncState.get(url) || {};
+  if (state.running) return;
+  state.running = true;
+  syncState.set(url, state);
+  const meta = syncMeta.get(name) || {};
+  meta.lastAttemptAt = new Date().toISOString();
+  syncMeta.set(name, meta);
+  try {
+    const res = await fetchBinary(url);
+    if (res.notModified) {
+      state.running = false;
+      syncState.set(url, state);
+      meta.lastCheckedAt = new Date().toISOString();
+      syncMeta.set(name, meta);
+      await sendTeamsNotification(
+        `Sync OK (no changes): ${name}\nChecked: ${formatIst(meta.lastCheckedAt)}`
+      );
+      return;
+    }
+    const tmpPath = `${destPath}.tmp-${Date.now()}`;
+    await fs.promises.mkdir(path.dirname(destPath), { recursive: true });
+    await fs.promises.writeFile(tmpPath, res.buffer);
+    await fs.promises.rename(tmpPath, destPath);
+    syncState.set(url, {
+      etag: res.etag,
+      lastModified: res.lastModified,
+      running: false
+    });
+    syncMeta.set(name, {
+      lastAttemptAt: meta.lastAttemptAt,
+      lastCheckedAt: new Date().toISOString(),
+      lastSuccessAt: new Date().toISOString(),
+      lastError: ""
+    });
+    console.log(`Synced ${url} -> ${destPath}`);
+    await sendTeamsNotification(
+      `Sync OK: ${name}\nUpdated: ${formatIst(new Date().toISOString())}`
+    );
+  } catch (e) {
+    state.running = false;
+    syncState.set(url, state);
+    syncMeta.set(name, {
+      lastAttemptAt: meta.lastAttemptAt,
+      lastCheckedAt: new Date().toISOString(),
+      lastSuccessAt: meta.lastSuccessAt || "",
+      lastError: String(e?.message || e)
+    });
+    console.warn(`Sync failed for ${url}: ${e.message || e}`);
+    await sendTeamsNotification(
+      `Sync FAILED: ${name}\nChecked: ${formatIst(new Date().toISOString())}\nError: ${String(e?.message || e)}`
+    );
+  }
+}
+
+function scheduleSync(name, url, destPath, intervalMs) {
+  if (!DATA_SYNC_ENABLED) return;
+  if (!url) return;
+  if (!Number.isFinite(intervalMs) || intervalMs <= 0) return;
+  console.log(`Sync enabled for ${name} every ${Math.round(intervalMs / 60000)}m`);
+  downloadToFile(name, url, destPath);
+  const timer = setInterval(() => downloadToFile(name, url, destPath), intervalMs);
+  if (timer.unref) timer.unref();
+}
+
+function fileStatus(pathname) {
+  if (!fs.existsSync(pathname)) return { exists: false, updatedAt: "" };
+  const stat = fs.statSync(pathname);
+  return { exists: true, updatedAt: new Date(stat.mtimeMs).toISOString() };
 }
 
 // --- FX cache (daily) ---
@@ -647,6 +776,50 @@ app.get("/api/counselors", (req, res) => {
     String(r.employeeId || "").toLowerCase().includes(q)
   ).slice(0, 10);
   res.json({ items });
+});
+
+app.get("/api/sync-status", (req, res) => {
+  const studentsMeta = syncMeta.get("students") || {};
+  const counselorsMeta = syncMeta.get("counselors") || {};
+  const countryMeta = syncMeta.get("country_currency") || {};
+  res.json({
+    serverTime: new Date().toISOString(),
+    students: { ...fileStatus(STUDENTS_XLSX_PATH), ...studentsMeta },
+    counselors: { ...fileStatus(COUNSELORS_CSV_PATH), ...counselorsMeta },
+    country_currency: { ...fileStatus(COUNTRY_CURRENCY_PATH), ...countryMeta }
+  });
+});
+
+app.post("/api/sync", async (req, res) => {
+  try {
+    const targetsRaw = normalizeStr(req.query.targets || "all").toLowerCase();
+    const wantAll = targetsRaw === "all";
+    const wants = new Set(targetsRaw.split(",").map((t) => t.trim()).filter(Boolean));
+    const tasks = [];
+    const picked = [];
+
+    if (STUDENTS_SOURCE_URL && (wantAll || wants.has("students"))) {
+      tasks.push(downloadToFile("students", STUDENTS_SOURCE_URL, STUDENTS_XLSX_PATH));
+      picked.push("students");
+    }
+    if (COUNSELORS_SOURCE_URL && (wantAll || wants.has("counselors"))) {
+      tasks.push(downloadToFile("counselors", COUNSELORS_SOURCE_URL, COUNSELORS_CSV_PATH));
+      picked.push("counselors");
+    }
+    if (COUNTRY_CURRENCY_SOURCE_URL && (wantAll || wants.has("country_currency"))) {
+      tasks.push(downloadToFile("country_currency", COUNTRY_CURRENCY_SOURCE_URL, COUNTRY_CURRENCY_PATH));
+      picked.push("country_currency");
+    }
+
+    if (!tasks.length) {
+      return res.status(400).json({ error: "No valid sync targets configured." });
+    }
+
+    await Promise.all(tasks);
+    return res.json({ ok: true, targets: picked });
+  } catch (e) {
+    return res.status(500).json({ error: String(e) });
+  }
 });
 
 app.get("/api/fx", async (req, res) => {
@@ -1146,6 +1319,10 @@ app.post("/api/pdf", async (req, res) => {
 app.get("/healthz", (req, res) => res.json({ ok: true, ts: new Date().toISOString() }));
 
 app.get("/health", (req, res) => res.json({ ok: true }));
+
+scheduleSync("students", STUDENTS_SOURCE_URL, STUDENTS_XLSX_PATH, STUDENTS_SYNC_MS);
+scheduleSync("counselors", COUNSELORS_SOURCE_URL, COUNSELORS_CSV_PATH, COUNSELORS_SYNC_MS);
+scheduleSync("country_currency", COUNTRY_CURRENCY_SOURCE_URL, COUNTRY_CURRENCY_PATH, COUNTRY_CURRENCY_SYNC_MS);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));

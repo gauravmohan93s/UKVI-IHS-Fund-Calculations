@@ -39,6 +39,7 @@ const els = {
   buffer: $("buffer"),
   rateHint: $("rateHint"),
   ratePanel: $("ratePanel"),
+  dataStatus: $("dataStatus"),
 
   addRow: $("addRow"),
   clearRows: $("clearRows"),
@@ -1085,6 +1086,33 @@ document.querySelectorAll("[data-date]").forEach((btn) => {
 
 loadConfig().then(()=>{ els.regionDisplay.value = "Outside London"; }).catch(()=> { if (els.ratePanel) els.ratePanel.textContent = "Could not load configuration."; });
 
+function formatIst(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const fmt = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+  return `${fmt.format(d)} IST`;
+}
+
+async function loadSyncStatus() {
+  if (!els.dataStatus) return;
+  try {
+    const out = await apiFetch("/api/sync-status").then((r) => r.json());
+    const updatedAt = out?.students?.updatedAt || out?.students?.lastSuccessAt || "";
+    const text = formatIst(updatedAt);
+    els.dataStatus.textContent = text ? `Student data updated: ${text}` : "Student data status unavailable.";
+  } catch (_) {
+    els.dataStatus.textContent = "Student data status unavailable.";
+  }
+}
+
 async function apiFetch(url, opts = {}) {
   const code = localStorage.getItem("kc_access_code") || "";
   const headers = { ...(opts.headers || {}), ...(code ? { "x-access-code": code } : {}) };
@@ -1127,6 +1155,8 @@ initStudentSearch();
 initCounselorSearch();
 toggleFundsSkip();
 updateIhsQuick();
+loadSyncStatus();
+setInterval(loadSyncStatus, 5 * 60 * 1000);
 
 
 // Step navigation guard
