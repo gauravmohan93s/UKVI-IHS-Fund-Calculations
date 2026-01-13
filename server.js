@@ -1312,7 +1312,23 @@ app.post("/api/pdf", async (req, res) => {
       doc.fillColor("#000000");
     };
 
-    const measureKeyValueBoxHeight = (rows, w, labelRatio = 0.58) => {
+    const baseBoxText = {
+      title: 9,
+      section: 7,
+      label: 6,
+      value: 8,
+      secondary: 7,
+      singleLinePrimary: 8,
+    };
+    const legacyBoxText = {
+      title: 10,
+      section: 8,
+      label: 7,
+      value: 9,
+      secondary: 8,
+      singleLinePrimary: 9,
+    };
+    const measureKeyValueBoxHeight = (rows, w, labelRatio = 0.58, text = baseBoxText) => {
       const headerH = 14;
       const paddingX = 10;
       const labelW = Math.floor((w - paddingX * 2) * labelRatio);
@@ -1321,40 +1337,40 @@ app.post("/api/pdf", async (req, res) => {
       rows.forEach((row) => {
         const label = String(row.label ?? "-");
         if (row.section) {
-          doc.fontSize(7);
+          doc.fontSize(text.section);
           const sh = doc.heightOfString(label, { width: w - paddingX * 2 });
           height += sh + 6;
           return;
         }
         const value = String(row.value ?? "-");
-        doc.fontSize(6);
+        doc.fontSize(text.label);
         const lh = doc.heightOfString(label, { width: labelW });
         if (row.valueParts && row.valueParts.singleLine) {
-          doc.fontSize(8);
+          doc.fontSize(text.singleLinePrimary);
           const vh = doc.heightOfString(row.valueParts.primary || "-", { width: valueW, align: "right" });
           height += Math.max(lh, vh) + 4;
           return;
         }
         if (value.includes("\n")) {
           const [v1, v2] = value.split("\n");
-          doc.fontSize(8);
+          doc.fontSize(text.value);
           const h1 = doc.heightOfString(v1 || "-", { width: valueW, align: "right" });
-          doc.fontSize(7);
+          doc.fontSize(text.secondary);
           const h2 = doc.heightOfString(v2 || "-", { width: valueW, align: "right" });
           height += Math.max(lh, h1 + h2 + 2) + 4;
           return;
         }
-        doc.fontSize(8);
+        doc.fontSize(text.value);
         const vh = doc.heightOfString(value, { width: valueW, align: "right" });
         height += Math.max(lh, vh) + 4;
       });
       return height;
     };
 
-    const drawKeyValueBox = (x, boxY, w, h, title, rows, labelRatio = 0.58) => {
+    const drawKeyValueBox = (x, boxY, w, h, title, rows, labelRatio = 0.58, text = baseBoxText) => {
       doc.roundedRect(x, boxY, w, h, 8).fill("#f8fafc");
       doc.strokeColor("#e2e8f0").lineWidth(1).roundedRect(x, boxY, w, h, 8).stroke();
-      doc.fillColor("#0f172a").fontSize(9).text(title, x + 10, boxY + 4, { width: w - 20, align: "left" });
+      doc.fillColor("#0f172a").fontSize(text.title).text(title, x + 10, boxY + 4, { width: w - 20, align: "left" });
 
       const paddingX = 10;
       const headerH = 14;
@@ -1364,7 +1380,7 @@ app.post("/api/pdf", async (req, res) => {
       rows.forEach((row) => {
         const label = String(row.label ?? "-");
         if (row.section) {
-          doc.fontSize(7).fillColor("#334155").text(label, x + paddingX, ry, { width: w - paddingX * 2, align: "right" });
+          doc.fontSize(text.section).fillColor("#334155").text(label, x + paddingX, ry, { width: w - paddingX * 2, align: "right" });
           const sh = doc.heightOfString(label, { width: w - paddingX * 2 });
           ry += sh + 4;
           doc.strokeColor("#e2e8f0").lineWidth(0.5).moveTo(x + paddingX, ry).lineTo(x + w - paddingX, ry).stroke();
@@ -1372,20 +1388,20 @@ app.post("/api/pdf", async (req, res) => {
           return;
         }
         const value = String(row.value ?? "-");
-        doc.fontSize(6).fillColor("#64748b").text(label, x + paddingX, ry, { width: labelW });
+        doc.fontSize(text.label).fillColor("#64748b").text(label, x + paddingX, ry, { width: labelW });
         if (row.valueParts && row.valueParts.singleLine) {
           const primary = String(row.valueParts.primary || "-");
           const secondary = String(row.valueParts.secondary || "-");
           const sep = " | ";
-          doc.fontSize(8);
+          doc.fontSize(text.singleLinePrimary);
           const w1 = doc.widthOfString(primary);
-          doc.fontSize(7);
+          doc.fontSize(text.secondary);
           const w2 = doc.widthOfString(secondary);
           const wSep = doc.widthOfString(sep);
           const totalW = w1 + wSep + w2;
           const startX = x + paddingX + labelW + Math.max(0, valueW - totalW);
-          doc.fontSize(8).fillColor(row.valueColor || "#0f172a").text(primary, startX, ry, { lineBreak: false });
-          doc.fontSize(7).fillColor("#64748b").text(sep + secondary, startX + w1, ry, { lineBreak: false });
+          doc.fontSize(text.singleLinePrimary).fillColor(row.valueColor || "#0f172a").text(primary, startX, ry, { lineBreak: false });
+          doc.fontSize(text.secondary).fillColor("#64748b").text(sep + secondary, startX + w1, ry, { lineBreak: false });
           const lh = doc.heightOfString(label, { width: labelW });
           const vh = doc.heightOfString(primary, { width: valueW, align: "right" });
           ry += Math.max(lh, vh) + 4;
@@ -1393,22 +1409,22 @@ app.post("/api/pdf", async (req, res) => {
         }
         if (value.includes("\n")) {
           const [v1, v2] = value.split("\n");
-          doc.fontSize(8).fillColor(row.valueColor || "#0f172a").text(v1 || "-", x + paddingX + labelW, ry, { width: valueW, align: "right" });
+          doc.fontSize(text.value).fillColor(row.valueColor || "#0f172a").text(v1 || "-", x + paddingX + labelW, ry, { width: valueW, align: "right" });
           const h1 = doc.heightOfString(v1 || "-", { width: valueW, align: "right" });
-          doc.fontSize(7).fillColor("#64748b").text(v2 || "-", x + paddingX + labelW, ry + h1 + 2, { width: valueW, align: "right" });
+          doc.fontSize(text.secondary).fillColor("#64748b").text(v2 || "-", x + paddingX + labelW, ry + h1 + 2, { width: valueW, align: "right" });
           const h2 = doc.heightOfString(v2 || "-", { width: valueW, align: "right" });
           const lh = doc.heightOfString(label, { width: labelW });
           ry += Math.max(lh, h1 + h2 + 2) + 4;
           return;
         }
-        doc.fontSize(8).fillColor(row.valueColor || "#0f172a").text(value, x + paddingX + labelW, ry, { width: valueW, align: "right" });
+        doc.fontSize(text.value).fillColor(row.valueColor || "#0f172a").text(value, x + paddingX + labelW, ry, { width: valueW, align: "right" });
         const lh = doc.heightOfString(label, { width: labelW });
         const vh = doc.heightOfString(value, { width: valueW, align: "right" });
         ry += Math.max(lh, vh) + 4;
       });
     };
 
-    const measureTwoColBoxHeight = (w, rows) => {
+    const measureTwoColBoxHeight = (w, rows, fontSize = 7) => {
       const headerH = 18;
       const paddingX = 10;
       const colGap = 12;
@@ -1417,6 +1433,7 @@ app.post("/api/pdf", async (req, res) => {
       rows.forEach((r) => {
         const leftText = `${r.leftLabel}: ${r.leftValue || "-"}`;
         const rightText = `${r.rightLabel}: ${r.rightValue || "-"}`;
+        doc.fontSize(fontSize);
         const lh = doc.heightOfString(leftText, { width: colW });
         const rh = doc.heightOfString(rightText, { width: colW });
         height += Math.max(lh, rh) + 4;
@@ -1424,12 +1441,12 @@ app.post("/api/pdf", async (req, res) => {
       return height;
     };
 
-    const drawTwoColBox = (x, boxY, w, title, rows) => {
+    const drawTwoColBox = (x, boxY, w, title, rows, fontSize = 7) => {
       const headerH = 18;
       const paddingX = 10;
       const colGap = 12;
       const colW = (w - paddingX * 2 - colGap) / 2;
-      const height = measureTwoColBoxHeight(w, rows);
+      const height = measureTwoColBoxHeight(w, rows, fontSize);
 
       doc.roundedRect(x, boxY, w, height, 8).fill("#f8fafc");
       doc.strokeColor("#e2e8f0").lineWidth(1).roundedRect(x, boxY, w, height, 8).stroke();
@@ -1439,7 +1456,7 @@ app.post("/api/pdf", async (req, res) => {
       rows.forEach((r) => {
         const leftText = `${r.leftLabel}: ${r.leftValue || "-"}`;
         const rightText = `${r.rightLabel}: ${r.rightValue || "-"}`;
-        doc.fontSize(7).fillColor("#0f172a").text(leftText, x + paddingX, ry, { width: colW });
+        doc.fontSize(fontSize).fillColor("#0f172a").text(leftText, x + paddingX, ry, { width: colW });
         doc.text(rightText, x + paddingX + colW + colGap, ry, { width: colW });
         const lh = doc.heightOfString(leftText, { width: colW });
         const rh = doc.heightOfString(rightText, { width: colW });
@@ -1567,9 +1584,9 @@ app.post("/api/pdf", async (req, res) => {
       { leftLabel: "Name", leftValue: payload.counselorName || "-", rightLabel: "Email", rightValue: payload.counselorEmail || "-" },
       { leftLabel: "Role", leftValue: [payload.counselorDesignation, payload.counselorRoles].filter(Boolean).join(" / ") || "-", rightLabel: "Region/Sub", rightValue: [payload.counselorRegion, payload.counselorSubRegion].filter(Boolean).join(" / ") || "-" },
     ];
-    const counselorH = measureTwoColBoxHeight(pageWidth, counselorRows);
+    const counselorH = measureTwoColBoxHeight(pageWidth, counselorRows, 8);
     if (ensureSpace(counselorH)) {
-      drawTwoColBox(margin, y, pageWidth, "Counselor details", counselorRows);
+      drawTwoColBox(margin, y, pageWidth, "Counselor details", counselorRows, 8);
       y += counselorH + 8;
     }
 
@@ -1602,8 +1619,8 @@ app.post("/api/pdf", async (req, res) => {
       { label: "Maintenance (dependants)", value: dual(fundsReq.maintenanceDependantsGbp) },
       { label: "Buffer", value: dual(fundsReq.bufferGbp) },
     ];
-    const feesH = measureKeyValueBoxHeight(feesRows, halfWidth);
-    const fundsReqH = measureKeyValueBoxHeight(fundsReqRows, halfWidth);
+    const feesH = measureKeyValueBoxHeight(feesRows, halfWidth, 0.58, legacyBoxText);
+    const fundsReqH = measureKeyValueBoxHeight(fundsReqRows, halfWidth, 0.58, legacyBoxText);
 
     const gapLabel = gapEligible >= 0 ? "Funds are sufficient" : "Additional funds required";
     const gapValue = gapEligible >= 0 ? fmtGBP(gapEligible) : fmtGBP(Math.abs(gapEligible));
@@ -1613,16 +1630,16 @@ app.post("/api/pdf", async (req, res) => {
       { label: "Eligible funds", value: dual(fundsAvail.summary.totalEligibleGbp) },
       { label: gapLabel, value: `${gapValue}\n${gapValueQuote}`, valueColor: gapEligible >= 0 ? "#166534" : "#b91c1c" },
     ];
-    const totalsH = measureKeyValueBoxHeight(totalsRows, halfWidth, 0.5);
+    const totalsH = measureKeyValueBoxHeight(totalsRows, halfWidth, 0.5, legacyBoxText);
 
     if (ensureSpace(Math.max(feesH, fundsReqH + totalsH + 8))) {
-      drawKeyValueBox(margin, rowTop2, halfWidth, feesH, "Fees, IHS & Visa", feesRows, 0.5);
+      drawKeyValueBox(margin, rowTop2, halfWidth, feesH, "Fees, IHS & Visa", feesRows, 0.5, legacyBoxText);
       const rightTotalH = fundsReqH + totalsH + 8;
       const targetH = Math.max(feesH, rightTotalH);
       const extra = Math.max(0, targetH - rightTotalH);
       const totalsHAdj = totalsH + extra;
-      drawKeyValueBox(margin + halfWidth + colGap, rowTop2, halfWidth, fundsReqH, "Funds required (28-day)", fundsReqRows, 0.5);
-      drawKeyValueBox(margin + halfWidth + colGap, rowTop2 + fundsReqH + 8, halfWidth, totalsHAdj, "Totals", totalsRows, 0.5);
+      drawKeyValueBox(margin + halfWidth + colGap, rowTop2, halfWidth, fundsReqH, "Funds required (28-day)", fundsReqRows, 0.5, legacyBoxText);
+      drawKeyValueBox(margin + halfWidth + colGap, rowTop2 + fundsReqH + 8, halfWidth, totalsHAdj, "Totals", totalsRows, 0.5, legacyBoxText);
       y = rowTop2 + targetH + 8;
     }
 
@@ -1657,9 +1674,9 @@ app.post("/api/pdf", async (req, res) => {
         y += 6;
       } else {
         const emptyRows = [{ label: "Status", value: "Funds details not provided." }];
-        const emptyH = measureKeyValueBoxHeight(emptyRows, pageWidth);
+        const emptyH = measureKeyValueBoxHeight(emptyRows, pageWidth, 0.58, legacyBoxText);
         if (ensureSpace(emptyH)) {
-          drawKeyValueBox(margin, y, pageWidth, emptyH, "Funds available (details)", emptyRows, 0.5);
+          drawKeyValueBox(margin, y, pageWidth, emptyH, "Funds available (details)", emptyRows, 0.5, legacyBoxText);
           y += emptyH + 6;
         }
       }
