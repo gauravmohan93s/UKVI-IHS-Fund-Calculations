@@ -74,8 +74,10 @@ Place files in `data/` (or override with env vars):
 
 - `data/students.xlsx` (default, override with `STUDENTS_XLSX_PATH`)
   Columns used: `AcknowledgementNumber` or `AcknowledgmentNumber`, `StudentName`,
-  `ProgramName`, `University`, `STATUS`, `Intake InYear`, `ApplicationStageChangedOn`,
-  `Assignee`, `AssigneeEmail`, `DOB`, `Gender`, `MaritalStatus`, `City`, `Country`
+  `ProgramName`, `University`, `STATUS`, `Intake`, `InYear`, `Intake InYear`,
+  `ApplicationStageChangedOn`, `Assignee`, `AssigneeEmail`, `DOB`, `Gender`,
+  `MaritalStatus`, `City`, `Country`, `Gross Tuition Fees`, `Scholarship`,
+  `Deposit Paid`
 
 - `data/counselors.csv` (default, override with `COUNSELORS_CSV_PATH`)
   Columns used: `Employee ID`, `Name`, `Email ID (Official)`, `Region`, `Sub Region`,

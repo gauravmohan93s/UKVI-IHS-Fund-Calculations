@@ -92,66 +92,43 @@
           </label>
         </div>
       </div>
-      <div class="ihs-card ihs-summary">
-        <div class="ihs-card-title">IHS total</div>
-        <div class="ihs-kpi">
-          <div class="kpi-label">IHS Total (Quick)</div>
-          <div class="kpi-value" id="ihsQuickGbp">-</div>
-          <div class="kpi-sub" id="ihsQuickCalc">-</div>
-        </div>
-        <div class="ihs-summary-grid">
-          <div class="ihs-summary-item">
-            <div class="ihs-summary-label">Visa duration</div>
-            <div class="ihs-summary-value" id="ihsVisaDuration">-</div>
+      <div class="ihs-stack">
+        <div class="ihs-card ihs-summary">
+          <div class="ihs-card-title">IHS total</div>
+          <div class="ihs-kpi">
+            <div class="kpi-label">IHS Total (Quick)</div>
+            <div class="kpi-value" id="ihsQuickGbp">-</div>
+            <div class="kpi-sub" id="ihsQuickCalc">-</div>
           </div>
-          <div class="ihs-summary-item">
-            <div class="ihs-summary-label">Chargeable blocks</div>
-            <div class="ihs-summary-value" id="ihsChargeableBlocks">-</div>
+        </div>
+        <div class="ihs-card ihs-timeline">
+        <div class="ihs-card-title">IHS timeline (estimated)</div>
+        <div class="timeline" id="ihsQuickTimeline"></div>
+        <div class="muted small ihs-timeline-note"></div>
+        <div class="scenario-strip">
+          <div class="scenario-item full" id="ihsCurrentBox">
+            <div class="scenario-title">Current IHS window</div>
+            <div class="scenario-note" id="ihsCurrentText">Current IHS window details will appear here.</div>
+          </div>
+          <div class="scenario-item" id="ihsHigherBox">
+            <div class="scenario-title">Higher IHS window</div>
+            <div class="scenario-note" id="ihsHigherText">Higher IHS window details will appear here.</div>
+          </div>
+          <div class="scenario-item" id="ihsLowerBox">
+            <div class="scenario-title">Lower IHS window</div>
+            <div class="scenario-note" id="ihsLowerText">Lower IHS window details will appear here.</div>
+          </div>
+          <div class="scenario-item full" id="ihsNotBeforeBox">
+            <div class="scenario-title">Application limit</div>
+            <div class="scenario-note" id="ihsNotBeforeText">Application limit will appear here.</div>
           </div>
         </div>
       </div>
-    </div>
-    <div class="ihs-card ihs-timeline">
-      <div class="ihs-card-title">IHS timeline (estimated)</div>
-      <div class="timeline" id="ihsQuickTimeline"></div>
-      <div class="muted small ihs-timeline-note">
-        Clarifying intended travel impact (simple rule): if grant is under 1 month before course start,
-        visa starts 7 days before intended travel; if grant is under 7 days before intended travel, visa starts on the grant date.
-      </div>
-      <div class="scenario-strip">
-        <div class="scenario-item">
-          <div class="scenario-title">Grant >= 1 month</div>
-          <div class="scenario-note">Visa starts at course start minus wrap-up (longest stay).</div>
-          <div class="timeline scenario">
-            <div class="timeline-node"><div class="timeline-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v4H4V4zm0 6h16v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V10zm4 2v4h8v-4H8z"/></svg></div><div class="timeline-dot"></div><div class="timeline-label">Grant</div></div>
-            <div class="timeline-connector"><div>pre-wrap</div></div>
-            <div class="timeline-node"><div class="timeline-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12l20-5-3 5 3 5-20-5zm6.5 0l-2.5 4v-3l-2-.5 2-.5v-3l2.5 4z"/></svg></div><div class="timeline-dot"></div><div class="timeline-label">Visa start</div></div>
-          </div>
-        </div>
-        <div class="scenario-item">
-          <div class="scenario-title">Grant < 1 month</div>
-          <div class="scenario-note">Visa starts at travel minus 7 days (shorter stay).</div>
-          <div class="timeline scenario">
-            <div class="timeline-node"><div class="timeline-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l4 8h6l-6 4 2 8-6-5-6 5 2-8-6-4h6l4-8z"/></svg></div><div class="timeline-dot"></div><div class="timeline-label">Travel</div></div>
-            <div class="timeline-connector"><div>-7d</div></div>
-            <div class="timeline-node"><div class="timeline-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12l20-5-3 5 3 5-20-5zm6.5 0l-2.5 4v-3l-2-.5 2-.5v-3l2.5 4z"/></svg></div><div class="timeline-dot"></div><div class="timeline-label">Visa start</div></div>
-          </div>
-        </div>
-        <div class="scenario-item">
-          <div class="scenario-title">Grant < 7 days</div>
-          <div class="scenario-note">Visa starts on grant date (shortest stay).</div>
-          <div class="timeline scenario">
-            <div class="timeline-node"><div class="timeline-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v4H4V4zm0 6h16v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V10zm4 2v4h8v-4H8z"/></svg></div><div class="timeline-dot"></div><div class="timeline-label">Grant</div></div>
-            <div class="timeline-connector"><div>immediate</div></div>
-            <div class="timeline-node"><div class="timeline-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12l20-5-3 5 3 5-20-5zm6.5 0l-2.5 4v-3l-2-.5 2-.5v-3l2.5 4z"/></svg></div><div class="timeline-dot"></div><div class="timeline-label">Visa start</div></div>
-          </div>
-        </div>
       </div>
     </div>
     <div class="ihs-rule-grid">
       <div class="ihs-card" id="ihsRuleMatrix">
         <div class="ihs-card-title">How dates impact IHS (ST 25.3 matrix)</div>
-        <a class="ihs-link" href="https://www.gov.uk/guidance/immigration-rules/immigration-rules-appendix-student" target="_blank" rel="noopener">Source: Appendix Student ST 25.3</a>
         <table class="table compact">
           <thead>
             <tr><th>Grant timing vs course start</th><th>Intended travel rule</th><th>Visa start used for IHS</th></tr>
@@ -174,6 +151,7 @@
             </tr>
           </tbody>
         </table>
+        <a class="ihs-link" href="https://www.gov.uk/guidance/immigration-rules/immigration-rules-appendix-student" target="_blank" rel="noopener">Source: Appendix Student ST 25.3</a>
         <div class="muted small" style="margin-top:6px">
           Visa end date is always course end + post-course wrap (table). IHS is charged on total visa duration, rounded to 6-month blocks.
         </div>
@@ -260,14 +238,7 @@
       </label>
     </div>
 
-    <div class="notice info">
-      <strong>Reminder:</strong> Maintenance funds must be held for <strong>28 consecutive days</strong>.
-      The bank statement end date should be within <strong>31 days</strong> of the visa application date.
-    </div>
-
-    <div class="rate-panel" id="ratePanel">Loading official rates...</div>
-    <p class="muted small">Source: <a href="https://www.gov.uk/guidance/immigration-rules/immigration-rules-appendix-student" target="_blank" rel="noopener">UKVI Appendix Student (ST 25.3)</a></p>
-
+    <h3>Tuition Fee &amp; Deposit Paid</h3>
     <div class="form-grid">
       <label>Tuition fee (Total) - GBP
         <input id="tuitionTotal" type="number" min="0" step="0.01" placeholder="e.g., 18000"/>
@@ -291,17 +262,12 @@
     </div>
 
     <hr/>
-    <h2>Funds in bank statement (Inputs)</h2>
+    <h2>Available Funds</h2>
     <p class="muted small">Add each fund source line (bank statement, fixed deposit, or education loan). Amount is the closing balance or sanctioned amount. We convert to GBP using live FX.</p>
-    <label class="toggle">
-      <input type="checkbox" id="fundsSkip"/>
-      <span>No funds held yet - skip this section</span>
-    </label>
     <label class="toggle">
       <input type="checkbox" id="fundsCurrencyAuto" checked/>
       <span>Auto-update fund currency when Display currency changes</span>
     </label>
-    <div class="helper" id="fundsSkipNote" style="display:none">Funds validation will be skipped and available funds will be treated as GBP 0.</div>
 
     <div class="table-actions">
       <button id="addRow" class="secondary">+ Add row</button>
@@ -327,7 +293,9 @@
       <tbody></tbody>
       </table>
     </div>
-    <p class="muted small">Bank statements require start/end dates. Fixed deposits require a maturity date. Education loans require the disbursement letter date.</p>
+    <div class="notice info" id="fundsRulesNote" style="margin-top:10px">
+      Funds guidance will appear here.
+    </div>
 
     <div class="nav">
       <button class="secondary" data-prev="t1">Back</button>
@@ -388,44 +356,45 @@
     <div class="two-col">
       <div class="panel">
         <h3>Fees &amp; IHS</h3>
-        <table class="table compact">
-          <tbody>
-            <tr><td>Visa application fee</td><td id="visaFeeGbp">-</td></tr>
-            <tr><td>IHS total</td><td id="ihsTotalGbp">-</td></tr>
-            <tr><td>Visa service type</td><td id="visaServiceTypeOut">-</td></tr>
-            <tr><td>Decision time</td><td id="visaDecisionDaysOut">-</td></tr>
-            <tr><td>Estimated grant date</td><td id="grantDateOut">-</td></tr>
-          </tbody>
-        </table>
+        <table class="table compact table-2col">
+            <tbody>
+              <tr><td>Visa application fee</td><td id="visaFeeGbp">-</td><td>IHS total</td><td id="ihsTotalGbp">-</td></tr>
+              <tr><td>Service type / decision time</td><td id="visaServiceDecisionOut">-</td><td>Estimated grant date</td><td id="grantDateOut">-</td></tr>
+              <tr><td>Visa start date</td><td id="visaStartOut">-</td><td>Visa end date</td><td id="visaEndOut">-</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
-    </div>
 
-    <h3>Funds Required Breakdown (GBP)</h3>
-    <table class="table">
-      <thead><tr><th>Component</th><th>GBP</th></tr></thead>
+    <h3>Funds Required Breakdown</h3>
+    <table class="table dense funds-breakdown">
+      <thead><tr><th>Component</th><th>GBP</th><th>Local</th></tr></thead>
       <tbody>
-        <tr><td>Tuition due</td><td id="bTuition">-</td></tr>
-        <tr><td>Maintenance (student)</td><td id="bStudent">-</td></tr>
-        <tr><td>Maintenance (dependants)</td><td id="bDeps">-</td></tr>
-        <tr><td>Buffer</td><td id="bBuffer">-</td></tr>
-        <tr class="total"><td>Total required</td><td id="bTotal">-</td></tr>
+        <tr><td>Tuition total</td><td id="bTuitionTotalGbp">-</td><td id="bTuitionTotalFx">-</td></tr>
+        <tr><td>Less: Tuition paid</td><td id="bTuitionPaidGbp">-</td><td id="bTuitionPaidFx">-</td></tr>
+        <tr><td>Less: Scholarship / waiver</td><td id="bScholarshipGbp">-</td><td id="bScholarshipFx">-</td></tr>
+        <tr><td>Tuition due</td><td id="bTuition">-</td><td id="bTuitionFx">-</td></tr>
+        <tr><td>Maintenance (student)</td><td id="bStudent">-</td><td id="bStudentFx">-</td></tr>
+        <tr><td>Maintenance (dependants)</td><td id="bDeps">-</td><td id="bDepsFx">-</td></tr>
+        <tr><td>Buffer</td><td id="bBuffer">-</td><td id="bBufferFx">-</td></tr>
+        <tr class="total"><td>Total required</td><td id="bTotal">-</td><td id="bTotalFx">-</td></tr>
       </tbody>
     </table>
 
     <h3>Funds Available Breakdown (GBP)</h3>
     <div class="table-wrap">
-      <table class="table table-wide" id="fundsAvailBreak">
+      <table class="table table-wide dense" id="fundsAvailBreak">
         <thead><tr><th>Status</th><th>Type</th><th>Owner</th><th>Source</th><th>Amount</th><th>Currency</th><th>GBP</th><th>Date</th><th>Issues</th></tr></thead>
         <tbody></tbody>
       </table>
     </div>
 
+    <div class="rate-panel" id="ratePanel">Loading maintenance rates...</div>
+
     <div class="note warn" id="validationNote"></div>
     <div class="note" id="issueSummary" style="display:none"></div>
 
     <div class="note" id="rulesNote"></div>
-    <div class="note muted" id="sourcesNote"></div>
-
     <div class="nav">
       <button class="secondary" data-prev="t2">Back</button>
     </div>
@@ -433,10 +402,11 @@
 </main>
 
 <footer class="wrap muted small" id="brandFooter">
-  <p>Internal guidance tool. Always cross-check with latest GOV.UK requirements before filing.</p>
-  <p>For any issue/difficulty: Gaurav Mohan Sakhare, Senior Lead (Operation - UK Team) - gsakhare@kcoverseas.com</p>
+  <p><strong>Internal guidance tool.</strong> Always cross-check with latest GOV.UK requirements before filing.</p>
+  <p><strong>Support:</strong> Gaurav Mohan Sakhare, Senior Lead (Operation - UK Team) &middot; gsakhare@kcoverseas.com</p>
 </footer>
 
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 <script src="/app.js"></script>
 </body>
 </html>

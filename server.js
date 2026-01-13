@@ -57,10 +57,26 @@ const STUDENTS_SYNC_MIN_AGE_MINUTES = Number(process.env.STUDENTS_SYNC_MIN_AGE_M
 const COUNSELORS_SYNC_MIN_AGE_MINUTES = Number(process.env.COUNSELORS_SYNC_MIN_AGE_MINUTES || 0);
 const COUNTRY_CURRENCY_SYNC_MIN_AGE_MINUTES = Number(process.env.COUNTRY_CURRENCY_SYNC_MIN_AGE_MINUTES || 0);
 const TEAMS_WEBHOOK_URL = process.env.TEAMS_WEBHOOK_URL || "";
-const APP_VERSION = "2.3.0";
+const APP_VERSION = (() => {
+  try {
+    const pkgPath = path.join(__dirname, "package.json");
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
+    return String(pkg.version || "0.0.0");
+  } catch (_) {
+    return "0.0.0";
+  }
+})();
 
+const localConfigCache = { mtimeMs: 0, data: null };
 function readLocalConfig() {
-  return JSON.parse(fs.readFileSync(LOCAL_CONFIG_PATH, "utf-8"));
+  const stat = fs.statSync(LOCAL_CONFIG_PATH);
+  if (stat.mtimeMs === localConfigCache.mtimeMs && localConfigCache.data) {
+    return localConfigCache.data;
+  }
+  const parsed = JSON.parse(fs.readFileSync(LOCAL_CONFIG_PATH, "utf-8"));
+  localConfigCache.mtimeMs = stat.mtimeMs;
+  localConfigCache.data = parsed;
+  return parsed;
 }
 
 function readCountryCurrency() {
@@ -70,6 +86,9 @@ function readCountryCurrency() {
 
 function normalizeStr(val) {
   return String(val || "").trim();
+}
+function normalizeLower(val) {
+  return normalizeStr(val).toLowerCase();
 }
 
 const studentsCache = { mtimeMs: 0, rows: [] };
@@ -98,42 +117,74 @@ function loadStudents() {
 
   const mapped = rows.map((r) => {
     const n = normalizeKeyMap(r);
+    const ackNumber = normalizeStr(
+      n.acknowledgementnumber || n.acknowledgmentnumber
+    );
+    const studentName = normalizeStr(n.studentname);
+    const university = normalizeStr(n.university);
+    const status = normalizeStr(n.status);
+    const intakeYear = normalizeStr(
+      n.intake ||
+      n["intake"] ||
+      n["intake inyear"] ||
+      n["intake - inyear"] ||
+      n["intake in year"] ||
+      n["intake year"] ||
+      n["intake - in year"] ||
+      n.intakeinyear ||
+      n.intakeyear
+    );
+    const tuitionFeeTotalGbp = normalizeStr(
+      n["gross tuition fees"] ||
+      n["gross tuition fee"] ||
+      n["tuition fee"] ||
+      n["tuition fee gbp"] ||
+      n["tuition fee total"] ||
+      n["tuitionfeetotal"] ||
+      n["course fee"] ||
+      n["course fee gbp"] ||
+      n["coursefee"] ||
+      n["total fee"] ||
+      n["total fee gbp"]
+    );
+    const tuitionFeePaidGbp = normalizeStr(
+      n["deposit paid"] ||
+      n["tuition paid"] ||
+      n["tuition paid gbp"] ||
+      n["tuitionfeepaid"]
+    );
+    const scholarshipGbp = normalizeStr(
+      n["scholarship"] ||
+      n["scholarship gbp"] ||
+      n["waiver"]
+    );
+    const assignee = normalizeStr(n.assignee);
+    const assigneeEmail = normalizeStr(n.assigneeemail);
+    const city = normalizeStr(n.city);
+    const country = normalizeStr(n.country);
     return {
-      ackNumber: normalizeStr(n.acknowledgementnumber || n.acknowledgmentnumber),
-      studentName: normalizeStr(n.studentname),
+      ackNumber,
+      ackLower: normalizeLower(ackNumber),
+      studentId: normalizeStr(n["student id."] || n["student id"] || n.studentid || n["studentid"]),
+      studentName,
+      studentNameLower: normalizeLower(studentName),
       programName: normalizeStr(n.programname),
-      university: normalizeStr(n.university),
-      status: normalizeStr(n.status),
-      intakeYear: normalizeStr(
-        n.intake ||
-        n["intake"] ||
-        n["intake inyear"] ||
-        n["intake - inyear"] ||
-        n["intake in year"] ||
-        n["intake year"] ||
-        n["intake - in year"] ||
-        n.intakeinyear ||
-        n.intakeyear
-      ),
-      tuitionFeeTotalGbp: normalizeStr(
-        n["tuition fee"] ||
-        n["tuition fee gbp"] ||
-        n["tuition fee total"] ||
-        n["tuitionfeetotal"] ||
-        n["course fee"] ||
-        n["course fee gbp"] ||
-        n["coursefee"] ||
-        n["total fee"] ||
-        n["total fee gbp"]
-      ),
+      university,
+      status,
+      intakeYear,
+      tuitionFeeTotalGbp,
+      tuitionFeePaidGbp,
+      scholarshipGbp,
       applicationStageChangedOn: normalizeStr(n.applicationstagechangedon),
-      assignee: normalizeStr(n.assignee),
-      assigneeEmail: normalizeStr(n.assigneeemail),
+      assignee,
+      assigneeEmail,
+      assigneeLower: normalizeLower(assignee),
+      assigneeEmailLower: normalizeLower(assigneeEmail),
       dob: normalizeStr(n.dob),
       gender: normalizeStr(n.gender),
       maritalStatus: normalizeStr(n.maritalstatus),
-      city: normalizeStr(n.city),
-      country: normalizeStr(n.country),
+      city,
+      country,
     };
   }).filter((r) => r.ackNumber || r.studentName);
 
@@ -150,15 +201,25 @@ function loadCounselors() {
 
   const csv = fs.readFileSync(COUNSELORS_CSV_PATH, "utf-8");
   const rows = parseCsv(csv, { columns: true, skip_empty_lines: true, bom: true });
-  const mapped = rows.map((r) => ({
-    employeeId: normalizeStr(r["Employee ID"] || r.EmployeeID || r.EmployeeId),
-    name: normalizeStr(r.Name),
-    email: normalizeStr(r["Email ID (Official)"] || r.Email || r.EmailID),
-    region: normalizeStr(r.Region),
-    subRegion: normalizeStr(r["Sub Region"] || r.SubRegion),
-    designation: normalizeStr(r.Designation),
-    roles: normalizeStr(r.Roles),
-  })).filter((r) => r.name || r.email || r.employeeId);
+  const mapped = rows.map((r) => {
+    const employeeId = normalizeStr(
+      r["Employee ID"] || r.EmployeeID || r.EmployeeId
+    );
+    const name = normalizeStr(r.Name);
+    const email = normalizeStr(r["Email ID (Official)"] || r.Email || r.EmailID);
+    return {
+      employeeId,
+      employeeIdLower: normalizeLower(employeeId),
+      name,
+      nameLower: normalizeLower(name),
+      email,
+      emailLower: normalizeLower(email),
+      region: normalizeStr(r.Region),
+      subRegion: normalizeStr(r["Sub Region"] || r.SubRegion),
+      designation: normalizeStr(r.Designation),
+      roles: normalizeStr(r.Roles),
+    };
+  }).filter((r) => r.name || r.email || r.employeeId);
 
   counselorsCache.mtimeMs = stat.mtimeMs;
   counselorsCache.rows = mapped;
@@ -575,6 +636,9 @@ function calcFundsRequired(payload, config){
 
   return {
     routeKey, region, monthsRequired: months,
+    tuitionTotalGbp: round2(tuitionTotal),
+    tuitionPaidGbp: round2(tuitionPaid),
+    scholarshipGbp: round2(scholarship),
     tuitionDueGbp: round2(tuitionDue),
     maintenanceStudentGbp: round2(maintenanceStudent),
     maintenanceDependantsGbp: round2(maintenanceDependants),
@@ -592,25 +656,6 @@ async function calcFundsAvailable(payload, rules){
   const fundsHoldDays = Number(rules?.funds_hold_days ?? 28);
   const statementAgeDays = Number(rules?.statement_age_days ?? 31);
   const loanLetterMaxAgeDays = Number(rules?.loan_letter_max_age_days ?? 180);
-  const skipFunds = Boolean(payload.fundsSkip);
-
-  if (skipFunds) {
-    return {
-      summary: {
-        totalAllGbp: 0,
-        totalEligibleGbp: 0,
-        fundsHoldDays,
-        statementAgeDays,
-        loanLetterMaxAgeDays,
-        hasApplicationDate: !!applicationDate,
-        anyRowMissingDates: false,
-        anyIneligibleRows: false,
-        skipped: true,
-        skipReason: "User marked funds as not held yet"
-      },
-      rows: []
-    };
-  }
 
   let totalAllGbp = 0;
   let totalEligibleGbp = 0;
@@ -939,20 +984,28 @@ app.get("/api/config", async (req, res) => {
     if (!CONFIG_URL) {
       return res.json({ config: { ...local, country_currency: countryCurrency }, source: "local" });
     }
-
-    const remote = await fetchJson(CONFIG_URL, 8000);
-    const merged = {
-      ...local,
-      ...remote,
-      routes: { ...local.routes, ...(remote.routes || {}) },
-      rules: { ...local.rules, ...(remote.rules || {}) },
-      ihs: { ...local.ihs, ...(remote.ihs || {}) },
-      fees: { ...local.fees, ...(remote.fees || {}) },
-      fx: { ...local.fx, ...(remote.fx || {}) },
-      universities: remote.universities || local.universities,
-      country_currency: { ...(local.country_currency || {}), ...(remote.country_currency || {}), ...countryCurrency }
-    };
-    res.json({ config: merged, source: "remote", config_url: CONFIG_URL });
+    try {
+      const remote = await fetchJson(CONFIG_URL, 8000);
+      const merged = {
+        ...local,
+        ...remote,
+        routes: { ...local.routes, ...(remote.routes || {}) },
+        rules: { ...local.rules, ...(remote.rules || {}) },
+        ihs: { ...local.ihs, ...(remote.ihs || {}) },
+        fees: { ...local.fees, ...(remote.fees || {}) },
+        fx: { ...local.fx, ...(remote.fx || {}) },
+        universities: remote.universities || local.universities,
+        country_currency: { ...(local.country_currency || {}), ...(remote.country_currency || {}), ...countryCurrency }
+      };
+      return res.json({ config: merged, source: "remote", config_url: CONFIG_URL });
+    } catch (e) {
+      return res.json({
+        config: { ...local, country_currency: countryCurrency },
+        source: "local-fallback",
+        config_url: CONFIG_URL,
+        error: String(e?.message || e)
+      });
+    }
   } catch (e) {
     res.status(500).json({ error: String(e) });
   }
@@ -963,8 +1016,8 @@ app.get("/api/students", (req, res) => {
   if (!q) return res.json({ items: [] });
   const rows = loadStudents();
   const items = rows.filter((r) =>
-    String(r.ackNumber || "").toLowerCase().includes(q) ||
-    String(r.studentName || "").toLowerCase().includes(q)
+    String(r.ackLower || "").includes(q) ||
+    String(r.studentNameLower || "").includes(q)
   ).slice(0, 10);
   res.json({ items });
 });
@@ -974,9 +1027,9 @@ app.get("/api/counselors", (req, res) => {
   if (!q) return res.json({ items: [] });
   const rows = loadCounselors();
   const items = rows.filter((r) =>
-    String(r.name || "").toLowerCase().includes(q) ||
-    String(r.email || "").toLowerCase().includes(q) ||
-    String(r.employeeId || "").toLowerCase().includes(q)
+    String(r.nameLower || "").includes(q) ||
+    String(r.emailLower || "").includes(q) ||
+    String(r.employeeIdLower || "").includes(q)
   ).slice(0, 10);
   res.json({ items });
 });
@@ -1465,32 +1518,48 @@ app.post("/api/pdf", async (req, res) => {
     const colGap = 12;
     const halfWidth = (pageWidth - colGap) / 2;
     const rowTop = y;
-    const courseRows = [
-      { label: "University", value: payload.universityName || "-" },
-      { label: "Study location", value: normalizeRegion(payload.region || "outside_london") === "london" ? "London" : "Outside London" },
-      { label: "Course dates", value: courseDates },
-      { label: "Visa application", value: formatDateDisplay(payload.applicationDate) },
-      { label: "Visa service type", value: ihs.visaServiceType ? String(ihs.visaServiceType).replace("-", " ") : "-" },
-      { label: "Decision time", value: ihs.decisionDays ? `${ihs.decisionDays} working days` : "-" },
-      { label: "Intended travel", value: formatDateDisplay(payload.intendedTravelDate || ihs.intendedTravelDate) },
-      { label: "Pre-sessional course", value: payload.isPreSessional ? "Yes" : "No" },
-      { label: "Display currency", value: fxAvailable ? quote : "GBP (FX unavailable)" },
-    ];
+    const locationLabel = normalizeRegion(payload.region || "outside_london") === "london"
+      ? "London"
+      : "Outside London";
+    const universityValue = payload.universityName ? `${payload.universityName} (${locationLabel})` : "-";
+    const programValue = payload.studentProgram
+      ? `${payload.studentProgram}${payload.studentIntakeYear ? ` (${payload.studentIntakeYear})` : ""}`
+      : "-";
     const studentRows = [
       { label: "Acknowledgement No", value: payload.studentAckNumber || "-" },
       { label: "Student name", value: payload.studentName || "-" },
-      { label: "Program", value: payload.studentProgram || "-" },
-      { label: "Status", value: payload.studentStatus || "-" },
-      { label: "Intake", value: payload.studentIntakeYear || "-" },
+      { label: "Student ID", value: payload.studentId || "-" },
+      { label: "University", value: universityValue },
+      { label: "Program", value: programValue },
+      { label: "Course dates", value: courseDates },
       { label: "City / Country", value: studentCityCountry || "-" },
+      { label: "Display currency", value: fxAvailable ? quote : "GBP (FX unavailable)" },
+    ];
+    const serviceLabel = ihs.visaServiceType ? String(ihs.visaServiceType).replace("-", " ") : "-";
+    const decisionLabel = ihs.decisionDays ? `${ihs.decisionDays} working days` : "-";
+    const serviceValue = serviceLabel !== "-"
+      ? (decisionLabel !== "-" ? `${serviceLabel} (${decisionLabel})` : serviceLabel)
+      : "-";
+    const visaStartLabel = formatDateDisplay(ihs.visaStartDate);
+    const visaEndLabel = formatDateDisplay(ihs.visaEndDate);
+    const visaDateRange = (visaStartLabel !== "-" || visaEndLabel !== "-")
+      ? `${visaStartLabel} - ${visaEndLabel}`
+      : "-";
+    const visaRows = [
+      { label: "Visa application", value: formatDateDisplay(payload.applicationDate) },
+      { label: "Visa service type", value: serviceValue },
+      { label: "Intended travel", value: formatDateDisplay(payload.intendedTravelDate || ihs.intendedTravelDate) },
+      { label: "Pre-sessional course", value: payload.isPreSessional ? "Yes" : "No" },
+      { label: "Visa dates", value: visaDateRange },
+      { label: "Total stay", value: `${ihs.totalStayMonths} months (${ihs.totalStayDays} days)` },
     ];
     const boxH1 = Math.max(
-      measureKeyValueBoxHeight(courseRows, halfWidth),
-      measureKeyValueBoxHeight(studentRows, halfWidth)
+      measureKeyValueBoxHeight(studentRows, halfWidth),
+      measureKeyValueBoxHeight(visaRows, halfWidth)
     );
     if (ensureSpace(boxH1)) {
-      drawKeyValueBox(margin, rowTop, halfWidth, boxH1, "Course details", courseRows);
-      drawKeyValueBox(margin + halfWidth + colGap, rowTop, halfWidth, boxH1, "Student details", studentRows);
+      drawKeyValueBox(margin, rowTop, halfWidth, boxH1, "Student details", studentRows);
+      drawKeyValueBox(margin + halfWidth + colGap, rowTop, halfWidth, boxH1, "Visa details", visaRows);
       y = rowTop + boxH1 + 8;
     }
 
@@ -1510,7 +1579,9 @@ app.post("/api/pdf", async (req, res) => {
     const ihsCalcText = ihsParts.length ? `${ihsParts.join(" + ")} = ${fmtGBP(ihs.ihsPerPersonGbp)} per person` : "No IHS";
 
     const rowTop2 = y;
-    const visaFeeGbp = safeNum(config.fees?.visa_application_fee_gbp);
+    const baseVisaFee = safeNum(config.fees?.visa_application_fee_gbp);
+    const visaType = String(ihs.visaServiceType || "").toLowerCase();
+    const visaFeeGbp = baseVisaFee + (visaType === "priority" ? 500 : (visaType === "super-priority" || visaType === "super priority" ? 1000 : 0));
     const dual = (n) => `${fmtGBP(n)}\n${fmtQuote(n)}`;
     const dualInline = (n) => ({ primary: fmtGBP(n), secondary: fmtQuote(n), singleLine: true });
     const feesRows = [
@@ -1522,13 +1593,6 @@ app.post("/api/pdf", async (req, res) => {
       { section: true, label: "Visa" },
       { label: "Visa application fee", valueParts: dualInline(visaFeeGbp) },
       { section: true, label: "IHS" },
-      { label: "Course category", value: ihs.courseCategory || "-" },
-      { label: "Wrap-up periods", value: `${ihs.preWrapLabel} before / ${ihs.postWrapLabel} after` },
-      { label: "Estimated grant date", value: ihs.grantDate ? `${formatDateDisplay(ihs.grantDate)} (estimated)` : "-" },
-      { label: "Visa start date", value: formatDateDisplay(ihs.visaStartDate) },
-      { label: "Visa end date", value: formatDateDisplay(ihs.visaEndDate) },
-      { label: "Start rule", value: ihs.visaStartRule || "-" },
-      { label: "Total stay", value: `${ihs.totalStayMonths} months (${ihs.totalStayDays} days)` },
       { label: "IHS calculation", value: ihsCalcText },
       { label: "IHS total", valueParts: dualInline(ihs.ihsTotalGbp) },
     ];
@@ -1562,7 +1626,7 @@ app.post("/api/pdf", async (req, res) => {
       y = rowTop2 + targetH + 8;
     }
 
-    if (!fundsAvail.summary.skipped) {
+    if (fundsAvail.rows.length) {
       const issueCounts = new Map();
       fundsAvail.rows.forEach((r) => {
         if (!r.issues || !r.issues.length) return;
@@ -1584,28 +1648,26 @@ app.post("/api/pdf", async (req, res) => {
     }
 
     if (pdfMode === "internal") {
-      if (fundsAvail.summary.skipped) {
-        const noteH = 22;
-        if (ensureSpace(noteH + 6)) {
-          doc.roundedRect(margin, y, pageWidth, noteH, 6).fill("#fff7ed");
-          doc.strokeColor("#fed7aa").lineWidth(1).roundedRect(margin, y, pageWidth, noteH, 6).stroke();
-          doc.fillColor("#9a3412").fontSize(8).text("Funds section skipped: student marked as not holding funds yet.", margin + 8, y + 6, { width: pageWidth - 16 });
-          y += noteH + 6;
-        }
-      } else {
+      if (fundsAvail.rows.length) {
         if (ensureSpace(14)) {
           doc.fillColor("#0f172a").fontSize(10).text("Funds available (details)", margin, y);
           y += 12;
         }
         drawFundsTable(fundsAvail.rows);
         y += 6;
+      } else {
+        const emptyRows = [{ label: "Status", value: "Funds details not provided." }];
+        const emptyH = measureKeyValueBoxHeight(emptyRows, pageWidth);
+        if (ensureSpace(emptyH)) {
+          drawKeyValueBox(margin, y, pageWidth, emptyH, "Funds available (details)", emptyRows, 0.5);
+          y += emptyH + 6;
+        }
       }
     }
 
     const ruleText =
-      `Bank statements: funds must be held for ${config.rules.funds_hold_days} consecutive days and end within ${config.rules.statement_age_days} days of the visa application date. ` +
-      `FDs: maturity date required (28/31-day checks not applied). ` +
-      `Education loans: disbursement letter should be within ${config.rules.loan_letter_max_age_days ?? 180} days of the application. ` +
+      `Bank statements: funds must be held for ${config.rules.funds_hold_days} consecutive days and end within ${config.rules.statement_age_days} days of the visa application date.\n` +
+      `FDs: maturity date required (28/31-day checks not applied). Education loans: disbursement letter should be within ${config.rules.loan_letter_max_age_days ?? 180} days of the application.\n` +
       `Visa application date defaults to today if not provided.`;
     const rulesHeight = 22;
     if (y + rulesHeight > bottomLimit()) {

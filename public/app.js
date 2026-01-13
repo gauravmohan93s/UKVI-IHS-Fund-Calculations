@@ -48,9 +48,8 @@ const els = {
   addRow: $("addRow"),
   clearRows: $("clearRows"),
   fundsTbody: document.querySelector("#fundsTable tbody"),
-  fundsSkip: $("fundsSkip"),
-  fundsSkipNote: $("fundsSkipNote"),
   fundsCurrencyAuto: $("fundsCurrencyAuto"),
+  fundsRulesNote: $("fundsRulesNote"),
 
   btnCalc: $("btnCalc"),
   btnPdf: $("btnPdf"),
@@ -65,13 +64,36 @@ const els = {
   ihsGrantDate: $("ihsGrantDate"),
   ihsTravelEffective: $("ihsTravelEffective"),
   ihsQuickTimeline: $("ihsQuickTimeline"),
+  ihsIncreaseDate: $("ihsIncreaseDate"),
+  ihsIncreaseApplyBy: $("ihsIncreaseApplyBy"),
+  ihsIncreaseTotal: $("ihsIncreaseTotal"),
+  ihsIncreaseGrantDate: $("ihsIncreaseGrantDate"),
+  ihsIncreaseMessage: $("ihsIncreaseMessage"),
+  ihsCurrentTotal: $("ihsCurrentTotal"),
+  ihsCurrentApplyFrom: $("ihsCurrentApplyFrom"),
+  ihsCurrentApplyUntil: $("ihsCurrentApplyUntil"),
+  ihsCurrentGrantFrom: $("ihsCurrentGrantFrom"),
+  ihsCurrentGrantUntil: $("ihsCurrentGrantUntil"),
+  ihsApplyNotBefore: $("ihsApplyNotBefore"),
+  ihsCurrentText: $("ihsCurrentText"),
+  ihsHigherText: $("ihsHigherText"),
+  ihsLowerText: $("ihsLowerText"),
+  ihsNotBeforeText: $("ihsNotBeforeText"),
+  ihsMinGrantFrom: $("ihsMinGrantFrom"),
+  ihsMinGrantUntil: $("ihsMinGrantUntil"),
+  ihsMinVisaStartFrom: $("ihsMinVisaStartFrom"),
+  ihsMinVisaStartUntil: $("ihsMinVisaStartUntil"),
+  ihsMinApplyFrom: $("ihsMinApplyFrom"),
+  ihsMinApplyUntil: $("ihsMinApplyUntil"),
+  ihsMinTotal: $("ihsMinTotal"),
   ihsVisaDuration: $("ihsVisaDuration"),
   ihsChargeableBlocks: $("ihsChargeableBlocks"),
   visaFeeGbp: $("visaFeeGbp"),
   ihsTotalGbp: $("ihsTotalGbp"),
-  visaServiceTypeOut: $("visaServiceTypeOut"),
-  visaDecisionDaysOut: $("visaDecisionDaysOut"),
+  visaServiceDecisionOut: $("visaServiceDecisionOut"),
   grantDateOut: $("grantDateOut"),
+  visaStartOut: $("visaStartOut"),
+  visaEndOut: $("visaEndOut"),
   fundsReqGbp: $("fundsReqGbp"),
   fundsReqFx: $("fundsReqFx"),
   fundsAvailGbp: $("fundsAvailGbp"),
@@ -81,17 +103,94 @@ const els = {
   gapLabel: $("gapLabel"),
 
   bTuition: $("bTuition"),
+  bTuitionTotalGbp: $("bTuitionTotalGbp"),
+  bTuitionTotalFx: $("bTuitionTotalFx"),
+  bTuitionPaidGbp: $("bTuitionPaidGbp"),
+  bTuitionPaidFx: $("bTuitionPaidFx"),
+  bScholarshipGbp: $("bScholarshipGbp"),
+  bScholarshipFx: $("bScholarshipFx"),
+  bTuitionFx: $("bTuitionFx"),
   bStudent: $("bStudent"),
+  bStudentFx: $("bStudentFx"),
   bDeps: $("bDeps"),
+  bDepsFx: $("bDepsFx"),
   bBuffer: $("bBuffer"),
+  bBufferFx: $("bBufferFx"),
   bTotal: $("bTotal"),
+  bTotalFx: $("bTotalFx"),
   fundsAvailBreakBody: document.querySelector("#fundsAvailBreak tbody"),
   validationNote: $("validationNote"),
   issueSummary: $("issueSummary"),
   rulesNote: $("rulesNote"),
   eligibilityStatus: $("eligibilityStatus"),
-  sourcesNote: $("sourcesNote"),
+  toast: $("toast"),
 };
+
+function setButtonLabel(btn, busy, text) {
+  if (!btn) return;
+  if (busy) {
+    if (!btn.dataset.label) btn.dataset.label = btn.textContent;
+    btn.textContent = text;
+    return;
+  }
+  if (btn.dataset.label) btn.textContent = btn.dataset.label;
+}
+
+function setBusy(busy, mode) {
+  document.body.classList.toggle("is-busy", busy);
+  if (els.btnCalc) els.btnCalc.disabled = busy;
+  if (els.btnPdf) els.btnPdf.disabled = busy;
+  if (els.btnReset) els.btnReset.disabled = busy;
+  if (els.btnCalc) els.btnCalc.classList.toggle("loading", busy && mode === "calc");
+  if (els.btnPdf) els.btnPdf.classList.toggle("loading", busy && mode === "pdf");
+  if (busy) {
+    setButtonLabel(els.btnCalc, mode === "calc", "Calculating...");
+    setButtonLabel(els.btnPdf, mode === "pdf", "Generating PDF...");
+  } else {
+    setButtonLabel(els.btnCalc, false);
+    setButtonLabel(els.btnPdf, false);
+  }
+}
+
+function showToast(message, type = "error") {
+  if (!els.toast) return;
+  const msg = String(message || "").trim();
+  if (!msg) return;
+  els.toast.textContent = msg;
+  els.toast.classList.remove("info", "show");
+  if (type === "info") els.toast.classList.add("info");
+  els.toast.classList.add("show");
+  clearTimeout(showToast._timer);
+  showToast._timer = setTimeout(() => {
+    els.toast.classList.remove("show");
+  }, 2000);
+}
+
+function debounce(fn, waitMs = 400) {
+  let timer = null;
+  return (...args) => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), waitMs);
+  };
+}
+
+const ihsRequestCache = new Map();
+const IHS_CACHE_TTL_MS = 5 * 60 * 1000;
+async function getIhsCached(payload) {
+  const key = stableStringify(payload);
+  const cached = ihsRequestCache.get(key);
+  if (cached && (Date.now() - cached.ts) < IHS_CACHE_TTL_MS) {
+    return cached.data;
+  }
+  const res = await apiFetch("/api/ihs", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload)
+  }).then(r => r.json());
+  const out = res && !res.error ? res.ihs : null;
+  ihsRequestCache.set(key, { data: out, ts: Date.now() });
+  return out;
+}
 
 let CONFIG = null;
 let SELECTED_REGION = "outside_london";
@@ -114,6 +213,7 @@ const fmtMoney = (cur, n) => new Intl.NumberFormat(currencyLocale(cur), {
   maximumFractionDigits: 2
 }).format(Number(n || 0));
 const fmtGBP = (n) => fmtMoney("GBP", n);
+const fmtDualMoney = (gbp, quote, rate) => `${fmtMoney("GBP", gbp)} (${fmtMoney(quote, gbp * rate)})`;
 
 function setActiveTab(id){
   document.querySelectorAll(".tab").forEach(b => b.classList.toggle("active", b.dataset.tab === id));
@@ -166,6 +266,51 @@ function formatDateDisplay(value){
   return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 }
 
+function formatDateISO(value){
+  if (!value) return "";
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toISOString().slice(0, 10);
+}
+
+function addDays(value, days){
+  if (!value) return null;
+  const d = value instanceof Date ? new Date(value) : new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  const out = new Date(d.getTime());
+  out.setDate(out.getDate() + Number(days || 0));
+  return out;
+}
+
+function addWorkingDays(value, days){
+  if (!value) return null;
+  const d = value instanceof Date ? new Date(value) : new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  const total = Math.floor(Number(days || 0));
+  let remaining = Math.abs(total);
+  const dir = total >= 0 ? 1 : -1;
+  const out = new Date(d.getTime());
+  while (remaining > 0) {
+    out.setDate(out.getDate() + dir);
+    const day = out.getDay();
+    if (day !== 0 && day !== 6) remaining -= 1;
+  }
+  return out;
+}
+
+function addMonthsExcel(value, months){
+  if (!value) return null;
+  const d = value instanceof Date ? new Date(value) : new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  const day = d.getDate();
+  const out = new Date(d.getTime());
+  out.setDate(1);
+  out.setMonth(out.getMonth() + Number(months || 0));
+  const lastDay = new Date(out.getFullYear(), out.getMonth() + 1, 0).getDate();
+  out.setDate(Math.min(day, lastDay));
+  return out;
+}
+
 function applyCountryCurrency(country){
   if (!country || QUOTE_MANUAL) return;
   const map = CONFIG?.country_currency || {};
@@ -190,7 +335,7 @@ function getTodayISO(){
 function setApplicationDate(value){
   if (!els.applicationDate) return;
   els.applicationDate.value = value;
-  updateIhsQuick();
+  updateIhsQuickDebounced();
 }
 
 function applyDatePreset(kind){
@@ -210,6 +355,14 @@ function serviceTypeLabel(type){
   if (t === "priority") return "Priority";
   if (t === "super-priority" || t === "superpriority") return "Super Priority";
   return "Standard";
+}
+
+function visaFeeWithServiceType(baseFee, type){
+  const t = String(type || "").toLowerCase();
+  const base = Number(baseFee || 0);
+  if (t === "priority") return base + 500;
+  if (t === "super-priority" || t === "superpriority") return base + 1000;
+  return base;
 }
 
 function defaultDecisionDays(type){
@@ -350,6 +503,16 @@ async function applyStudent(item){
     const current = Number(els.tuitionTotal.value || 0);
     const incoming = Number(item.tuitionFeeTotalGbp || 0);
     if (!current && incoming) els.tuitionTotal.value = incoming;
+  }
+  if (els.tuitionPaid) {
+    const current = Number(els.tuitionPaid.value || 0);
+    const incoming = Number(item.tuitionFeePaidGbp || 0);
+    if (!current && incoming) els.tuitionPaid.value = incoming;
+  }
+  if (els.scholarship) {
+    const current = Number(els.scholarship.value || 0);
+    const incoming = Number(item.scholarshipGbp || 0);
+    if (!current && incoming) els.scholarship.value = incoming;
   }
 
   if (item.university){
@@ -509,18 +672,16 @@ async function loadConfig(){
         </table>
         <div class="rate-meta">Cap: ${s.max_months} months</div>
       </div>
-      <div class="rate-card">
-        <div class="rate-title">IHS rate</div>
-        <div class="rate-list">
-          <div><span class="rate-strong">Yearly:</span> ${fmtMoney("GBP", CONFIG.ihs.student_yearly_gbp)}</div>
-          <div><span class="rate-strong">Half-year:</span> ${fmtMoney("GBP", CONFIG.ihs.half_year_gbp)}</div>
-          <div><span class="rate-strong">Visa application fee:</span> ${fmtMoney("GBP", CONFIG.fees?.visa_application_fee_gbp || 0)}</div>
-        </div>
-      </div>
     `;
   }
 
-  els.sourcesNote.textContent = `Rates sourced from GOV.UK guidance (configured server-side). FX via frankfurter.app.`;
+  if (els.fundsRulesNote) {
+    els.fundsRulesNote.innerHTML =
+      `Bank statements: Funds must be held for <strong>${CONFIG.rules.funds_hold_days} consecutive days</strong> and end within <strong>${CONFIG.rules.statement_age_days} days</strong> of the visa application date. ` +
+      `FDs: Maturity date is required (28/31-day rule does not apply). ` +
+      `Education loans: Disbursement letter should be within <strong>${CONFIG.rules.loan_letter_max_age_days || 180} days</strong> of application. ` +
+      `Visa application date defaults to today if not provided. Maintenance months cap applied: <strong>${s.max_months}</strong>.`;
+  }
 }
 
 
@@ -569,6 +730,12 @@ function getFundsRows(){
 
 function getDefaultCurrency(){
   return els.quote?.value || "INR";
+}
+
+function parseNumberInput(val){
+  const cleaned = String(val ?? "").replace(/,/g, "").trim();
+  const num = Number(cleaned);
+  return Number.isFinite(num) ? num : 0;
 }
 
 function applyFundsCurrencyToRows(){
@@ -654,21 +821,11 @@ function addFundsRow(pref={}){
 }
 
 function toggleFundsSkip(){
-  const skip = Boolean(els.fundsSkip && els.fundsSkip.checked);
-  if (els.fundsSkipNote) els.fundsSkipNote.style.display = skip ? "block" : "none";
-  if (els.addRow) els.addRow.disabled = skip;
-  if (els.clearRows) els.clearRows.disabled = skip;
-  els.fundsTbody.querySelectorAll("input,select,button").forEach(el => {
-    el.disabled = skip;
-  });
-  if (!skip) {
-    els.fundsTbody.querySelectorAll("tr").forEach(updateFundRow);
-  }
+  // No-op (funds skip option removed).
 }
 
 els.addRow.addEventListener("click", () => addFundsRow({ fundType:"bank", accountType:"Student", currency:getDefaultCurrency() }));
 els.clearRows.addEventListener("click", () => { els.fundsTbody.innerHTML = ""; });
-if (els.fundsSkip) els.fundsSkip.addEventListener("change", toggleFundsSkip);
 if (els.fundsCurrencyAuto) {
   els.fundsCurrencyAuto.addEventListener("change", () => {
     if (els.fundsCurrencyAuto.checked) applyFundsCurrencyToRows();
@@ -731,6 +888,7 @@ function payload(){
     isPreSessional: Boolean(els.isPreSessional && els.isPreSessional.checked),
 
     studentAckNumber: (els.studentAck && els.studentAck.value) || (CURRENT_STUDENT && CURRENT_STUDENT.ackNumber) || "",
+    studentId: (CURRENT_STUDENT && CURRENT_STUDENT.studentId) || "",
     studentName: (els.studentName && els.studentName.value) || (CURRENT_STUDENT && CURRENT_STUDENT.studentName) || "",
     studentProgram: (els.studentProgram && els.studentProgram.value) || (CURRENT_STUDENT && CURRENT_STUDENT.programName) || "",
     studentStatus: (els.studentStatus && els.studentStatus.value) || (CURRENT_STUDENT && CURRENT_STUDENT.status) || "",
@@ -747,14 +905,13 @@ function payload(){
 
     quoteCurrency: els.quote.value,
 
-    tuitionFeeTotalGbp: Number(els.tuitionTotal.value || 0),
-    tuitionFeePaidGbp: Number(els.tuitionPaid.value || 0),
-    scholarshipGbp: Number(els.scholarship.value || 0),
-    dependantsCount: Number(els.dependants.value || 0),
-    bufferGbp: Number(els.buffer.value || 0),
+    tuitionFeeTotalGbp: parseNumberInput(els.tuitionTotal.value),
+    tuitionFeePaidGbp: parseNumberInput(els.tuitionPaid.value),
+    scholarshipGbp: parseNumberInput(els.scholarship.value),
+    dependantsCount: Math.floor(parseNumberInput(els.dependants.value)),
+    bufferGbp: parseNumberInput(els.buffer.value),
 
-    fundsSkip: Boolean(els.fundsSkip && els.fundsSkip.checked),
-    fundsRows: (els.fundsSkip && els.fundsSkip.checked) ? [] : getFundsRows(),
+    fundsRows: getFundsRows(),
 
     manualFx: {
       enabled: Boolean(els.useManualFx && els.useManualFx.checked),
@@ -799,10 +956,8 @@ function validateTab(tabId){
     // application date optional (defaults to today)
   }
   if (tabId === "t2"){
-    // At least one funds row required unless skipped
-    const skip = Boolean(els.fundsSkip && els.fundsSkip.checked);
+    // Funds are optional; no validation needed here.
     const rows = getFundsRows();
-    if (!skip && !rows.length) errs.push("Add at least one fund row or use the skip option.");
   }
   showErrors(errs);
   return errs.length === 0;
@@ -989,32 +1144,254 @@ function updateIhsTimeline(target, ihs, applicationDate){
   renderTimeline(target, items);
 }
 
+async function updateIhsScenario(ihs){
+  const setText = (el, value) => { if (el) el.textContent = value; };
+  const basePayload = (applicationDate) => ({
+    courseStart: els.courseStart?.value || "",
+    courseEnd: els.courseEnd?.value || "",
+    applicationDate,
+    applicationDateDefaulted: false,
+    visaServiceType: els.visaServiceType?.value || "standard",
+    visaDecisionDays: Number(els.visaDecisionDays && els.visaDecisionDays.value || 0),
+    intendedTravelDate: els.intendedTravelDate?.value || "",
+    isPreSessional: Boolean(els.isPreSessional && els.isPreSessional.checked)   
+  });
+  const fetchIhsForDate = async (dateValue) => {
+    const dateStr = typeof dateValue === "string" ? dateValue : formatDateISO(dateValue);
+    if (!dateStr) return null;
+    return await getIhsCached(basePayload(dateStr));
+  };
+  const findBoundaryDate = async (startDate, targetTotal, direction, maxDays, step = 14) => {
+    let lastSame = startDate;
+    for (let offset = step; offset <= maxDays; offset += step) {
+      const testDate = addDays(startDate, direction * offset);
+      const testRes = await fetchIhsForDate(testDate);
+      if (!testRes) break;
+      if (Number(testRes.ihsTotalGbp || 0) !== targetTotal) {
+        for (let i = 1; i <= step; i += 1) {
+          const d = addDays(lastSame, direction * i);
+          const r = await fetchIhsForDate(d);
+          if (!r || Number(r.ihsTotalGbp || 0) !== targetTotal) {
+            return addDays(d, -direction);
+          }
+        }
+        return lastSame;
+      }
+      lastSame = testDate;
+    }
+    return lastSame;
+  };
+  const findFirstDifferent = async (startDate, targetTotal, direction, maxDays, step = 14) => {
+    let lastSame = startDate;
+    for (let offset = step; offset <= maxDays; offset += step) {
+      const testDate = addDays(startDate, direction * offset);
+      const testRes = await fetchIhsForDate(testDate);
+      if (!testRes) break;
+      if (Number(testRes.ihsTotalGbp || 0) !== targetTotal) {
+        for (let i = 1; i <= step; i += 1) {
+          const d = addDays(lastSame, direction * i);
+          const r = await fetchIhsForDate(d);
+          if (r && Number(r.ihsTotalGbp || 0) !== targetTotal) {
+            return { date: d, ihs: r };
+          }
+        }
+        return { date: testDate, ihs: testRes };
+      }
+      lastSame = testDate;
+    }
+    return null;
+  };
+  const clear = () => {
+    setText(els.ihsIncreaseDate, "-");
+    setText(els.ihsIncreaseApplyBy, "-");
+    setText(els.ihsIncreaseTotal, "-");
+    setText(els.ihsIncreaseGrantDate, "-");
+    setText(els.ihsIncreaseMessage, "-");
+    setText(els.ihsCurrentTotal, "-");
+    setText(els.ihsCurrentApplyFrom, "-");
+    setText(els.ihsCurrentApplyUntil, "-");
+    setText(els.ihsCurrentGrantFrom, "-");
+    setText(els.ihsCurrentGrantUntil, "-");
+    setText(els.ihsApplyNotBefore, "-");
+    setText(els.ihsMinGrantFrom, "-");
+    setText(els.ihsMinGrantUntil, "-");
+    setText(els.ihsMinVisaStartFrom, "-");
+    setText(els.ihsMinVisaStartUntil, "-");
+    setText(els.ihsMinApplyFrom, "-");
+    setText(els.ihsMinApplyUntil, "-");
+    setText(els.ihsMinTotal, "-");
+    setText(els.ihsCurrentText, "Current IHS window details will appear here.");
+    setText(els.ihsHigherText, "Higher IHS window details will appear here.");
+    setText(els.ihsLowerText, "Lower IHS window details will appear here.");
+    setText(els.ihsNotBeforeText, "Application limit will appear here.");
+  };
+  if (!ihs) {
+    clear();
+    return;
+  }
+  // placeholder text handled in clear()
+  const currentTotal = Number(ihs.ihsTotalGbp || 0);
+  const baseDateStr = els.applicationDate?.value || getTodayISO();
+  let baseDate = new Date(baseDateStr);
+  if (Number.isNaN(baseDate.getTime())) {
+    baseDate = new Date(getTodayISO());
+  }
+  const courseStartDate = els.courseStart?.value ? new Date(els.courseStart.value) : null;
+  const courseEndDate = els.courseEnd?.value ? new Date(els.courseEnd.value) : null;
+  const applyNotBefore = courseStartDate && !Number.isNaN(courseStartDate.getTime())
+    ? addMonthsExcel(courseStartDate, -6)
+    : null;
+  const applyNotAfter = courseStartDate && !Number.isNaN(courseStartDate.getTime())
+    ? addMonthsExcel(courseStartDate, 1)
+    : null;
+  const fallbackStart = courseStartDate && !Number.isNaN(courseStartDate.getTime())
+    ? addMonthsExcel(courseStartDate, -6)
+    : addDays(baseDate, -365);
+  const fallbackEnd = courseStartDate && !Number.isNaN(courseStartDate.getTime())
+    ? addMonthsExcel(courseStartDate, 1)
+    : (courseEndDate && !Number.isNaN(courseEndDate.getTime())
+      ? addDays(courseEndDate, 30)
+      : addDays(baseDate, 365));
+  const maxDaysBack = fallbackStart
+    ? Math.max(14, Math.ceil((baseDate - fallbackStart) / 86400000))
+    : 365;
+  const maxDaysForward = fallbackEnd
+    ? Math.max(14, Math.ceil((fallbackEnd - baseDate) / 86400000))
+    : 365;
+  const currentStartRaw = await findBoundaryDate(baseDate, currentTotal, -1, maxDaysBack);
+  const currentEndRaw = await findBoundaryDate(baseDate, currentTotal, 1, maxDaysForward);
+  const currentStart = currentStartRaw && !Number.isNaN(new Date(currentStartRaw).getTime()) ? currentStartRaw : baseDate;
+  const currentEnd = currentEndRaw && !Number.isNaN(new Date(currentEndRaw).getTime()) ? currentEndRaw : baseDate;
+  const currentStartRes = await fetchIhsForDate(currentStart);
+  const currentEndRes = await fetchIhsForDate(currentEnd);
+  const currentApplyFrom = currentStart;
+  const currentApplyUntil = currentEnd;
+  const inRange = fallbackStart && fallbackEnd
+    ? (baseDate >= fallbackStart && baseDate <= fallbackEnd)
+    : true;
+  setText(els.ihsCurrentTotal, fmtMoney("GBP", currentTotal));
+  setText(els.ihsCurrentApplyFrom, formatDateDisplay(currentApplyFrom));
+  setText(els.ihsCurrentApplyUntil, formatDateDisplay(currentApplyUntil));
+  setText(els.ihsCurrentGrantFrom, currentStartRes ? formatDateDisplay(currentStartRes.grantDate) : "-");
+  setText(els.ihsCurrentGrantUntil, currentEndRes ? formatDateDisplay(currentEndRes.grantDate) : "-");
+  setText(els.ihsApplyNotBefore, applyNotBefore ? formatDateDisplay(applyNotBefore) : "-");
+  setText(
+    els.ihsCurrentText,
+    `Current IHS ${fmtMoney("GBP", currentTotal)} applies if you apply between ${formatDateDisplay(currentApplyFrom)} (grant ~${currentStartRes ? formatDateDisplay(currentStartRes.grantDate) : "-"}) and ${formatDateDisplay(currentApplyUntil)} (grant ~${currentEndRes ? formatDateDisplay(currentEndRes.grantDate) : "-"}).`
+  );
+
+  const dayBeforeCurrent = addDays(currentApplyFrom, -1);
+  const higherRes = dayBeforeCurrent ? await fetchIhsForDate(dayBeforeCurrent) : null;
+  if (higherRes && Number(higherRes.ihsTotalGbp || 0) > currentTotal) {
+    setText(els.ihsIncreaseTotal, fmtMoney("GBP", higherRes.ihsTotalGbp || 0));
+    setText(els.ihsIncreaseGrantDate, formatDateDisplay(higherRes.grantDate));
+    setText(
+      els.ihsHigherText,
+      `If you apply earlier than ${formatDateDisplay(currentApplyFrom)}, IHS is higher ${fmtMoney("GBP", higherRes.ihsTotalGbp || 0)} (grant ~${formatDateDisplay(higherRes.grantDate)}).`
+    );
+  } else {
+    setText(els.ihsIncreaseTotal, "-");
+    setText(els.ihsIncreaseGrantDate, "-");
+    setText(els.ihsHigherText, "No higher IHS in this window.");
+  }
+
+  const lowerFirst = await findFirstDifferent(currentEnd, currentTotal, 1, maxDaysForward);
+  if (lowerFirst && lowerFirst.ihs && Number(lowerFirst.ihs.ihsTotalGbp || 0) < currentTotal) {
+    const lowerTotal = Number(lowerFirst.ihs.ihsTotalGbp || 0);
+    const lowerStart = lowerFirst.date;
+    const lowerEnd = await findBoundaryDate(lowerStart, lowerTotal, 1, maxDaysForward);
+    const lowerStartRes = lowerFirst.ihs;
+    const lowerEndRes = await fetchIhsForDate(lowerEnd);
+    setText(els.ihsMinTotal, fmtMoney("GBP", lowerTotal));
+    setText(els.ihsMinApplyFrom, formatDateDisplay(lowerStart));
+    setText(els.ihsMinApplyUntil, formatDateDisplay(lowerEnd));
+    setText(els.ihsMinGrantFrom, lowerStartRes ? formatDateDisplay(lowerStartRes.grantDate) : "-");
+    setText(els.ihsMinGrantUntil, lowerEndRes ? formatDateDisplay(lowerEndRes.grantDate) : "-");
+    setText(els.ihsMinVisaStartFrom, lowerStartRes ? formatDateDisplay(lowerStartRes.visaStartDate) : "-");
+    setText(els.ihsMinVisaStartUntil, lowerEndRes ? formatDateDisplay(lowerEndRes.visaStartDate) : "-");
+    setText(
+      els.ihsLowerText,
+      `Lower IHS ${fmtMoney("GBP", lowerTotal)} applies if you apply between ${formatDateDisplay(lowerStart)} (grant ~${lowerStartRes ? formatDateDisplay(lowerStartRes.grantDate) : "-"}) and ${formatDateDisplay(lowerEnd)} (grant ~${lowerEndRes ? formatDateDisplay(lowerEndRes.grantDate) : "-"}).`
+    );
+  } else {
+    setText(els.ihsMinTotal, "-");
+    setText(els.ihsMinApplyFrom, "-");
+    setText(els.ihsMinApplyUntil, "-");
+    setText(els.ihsMinGrantFrom, "-");
+    setText(els.ihsMinGrantUntil, "-");
+    setText(els.ihsMinVisaStartFrom, "-");
+    setText(els.ihsMinVisaStartUntil, "-");
+    setText(els.ihsLowerText, "No lower IHS in this window.");
+  }
+
+  if (!inRange) {
+    setText(els.ihsCurrentApplyFrom, "-");
+    setText(els.ihsCurrentApplyUntil, "-");
+    setText(els.ihsCurrentGrantFrom, "-");
+    setText(els.ihsCurrentGrantUntil, "-");
+    setText(els.ihsMinApplyFrom, "-");
+    setText(els.ihsMinApplyUntil, "-");
+    setText(els.ihsMinGrantFrom, "-");
+    setText(els.ihsMinGrantUntil, "-");
+    setText(els.ihsMinVisaStartFrom, "-");
+    setText(els.ihsMinVisaStartUntil, "-");
+    setText(els.ihsApplyNotBefore, applyNotBefore ? formatDateDisplay(applyNotBefore) : "-");
+    setText(els.ihsCurrentText, "Outside the UKVI application window for this course.");
+    setText(els.ihsHigherText, "Outside the UKVI application window for this course.");
+    setText(els.ihsLowerText, "Outside the UKVI application window for this course.");
+  }
+
+  setText(
+    els.ihsNotBeforeText,
+    applyNotBefore ? `Visa application is not allowed before ${formatDateDisplay(applyNotBefore)}.` : "Visa application limit will appear here."
+  );
+}
+
 async function updateIhsQuick(){
   if (!els.courseStart?.value || !els.courseEnd?.value) {
     if (els.ihsQuickGbp) els.ihsQuickGbp.textContent = "-";
     if (els.ihsQuickCalc) els.ihsQuickCalc.textContent = "-";
     if (els.ihsVisaDuration) els.ihsVisaDuration.textContent = "-";
     if (els.ihsChargeableBlocks) els.ihsChargeableBlocks.textContent = "-";
+    if (els.ihsIncreaseDate) els.ihsIncreaseDate.textContent = "-";
+    if (els.ihsIncreaseApplyBy) els.ihsIncreaseApplyBy.textContent = "-";
+    if (els.ihsIncreaseTotal) els.ihsIncreaseTotal.textContent = "-";
+    if (els.ihsIncreaseGrantDate) els.ihsIncreaseGrantDate.textContent = "-";
+    if (els.ihsIncreaseMessage) els.ihsIncreaseMessage.textContent = "-";
+    if (els.ihsCurrentText) els.ihsCurrentText.textContent = "Current IHS window details will appear here.";
+    if (els.ihsHigherText) els.ihsHigherText.textContent = "Higher IHS window details will appear here.";
+    if (els.ihsLowerText) els.ihsLowerText.textContent = "Lower IHS window details will appear here.";
+    if (els.ihsNotBeforeText) els.ihsNotBeforeText.textContent = "Application limit will appear here.";
+    if (els.ihsCurrentTotal) els.ihsCurrentTotal.textContent = "-";
+    if (els.ihsCurrentApplyFrom) els.ihsCurrentApplyFrom.textContent = "-";
+    if (els.ihsCurrentApplyUntil) els.ihsCurrentApplyUntil.textContent = "-";
+    if (els.ihsCurrentGrantFrom) els.ihsCurrentGrantFrom.textContent = "-";
+    if (els.ihsCurrentGrantUntil) els.ihsCurrentGrantUntil.textContent = "-";
+    if (els.ihsApplyNotBefore) els.ihsApplyNotBefore.textContent = "-";
+    if (els.ihsMinGrantFrom) els.ihsMinGrantFrom.textContent = "-";
+    if (els.ihsMinGrantUntil) els.ihsMinGrantUntil.textContent = "-";
+    if (els.ihsMinVisaStartFrom) els.ihsMinVisaStartFrom.textContent = "-";
+    if (els.ihsMinVisaStartUntil) els.ihsMinVisaStartUntil.textContent = "-";
+    if (els.ihsMinApplyFrom) els.ihsMinApplyFrom.textContent = "-";
+    if (els.ihsMinApplyUntil) els.ihsMinApplyUntil.textContent = "-";
+    if (els.ihsMinTotal) els.ihsMinTotal.textContent = "-";
     return;
   }
   syncDecisionDays(false);
-  const res = await apiFetch("/api/ihs", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      courseStart: els.courseStart.value,
-      courseEnd: els.courseEnd.value,
-      applicationDate: els.applicationDate?.value || getTodayISO(),
-      applicationDateDefaulted: !els.applicationDate?.value,
-      visaServiceType: els.visaServiceType?.value || "standard",
-      visaDecisionDays: Number(els.visaDecisionDays && els.visaDecisionDays.value || 0),
-      intendedTravelDate: els.intendedTravelDate?.value || "",
-      isPreSessional: Boolean(els.isPreSessional && els.isPreSessional.checked)
-    })
-  }).then(r => r.json());
-  if (res.error) return;
-  if (els.ihsQuickGbp) els.ihsQuickGbp.textContent = fmtMoney("GBP", res.ihs.ihsTotalGbp);
-  if (els.ihsQuickCalc) els.ihsQuickCalc.textContent = buildIhsQuickCalc(res.ihs);
+  const ihsPayload = {
+    courseStart: els.courseStart.value,
+    courseEnd: els.courseEnd.value,
+    applicationDate: els.applicationDate?.value || getTodayISO(),
+    applicationDateDefaulted: !els.applicationDate?.value,
+    visaServiceType: els.visaServiceType?.value || "standard",
+    visaDecisionDays: Number(els.visaDecisionDays && els.visaDecisionDays.value || 0),
+    intendedTravelDate: els.intendedTravelDate?.value || "",
+    isPreSessional: Boolean(els.isPreSessional && els.isPreSessional.checked)
+  };
+  const ihsRes = await getIhsCached(ihsPayload);
+  if (!ihsRes) return;
+  if (els.ihsQuickGbp) els.ihsQuickGbp.textContent = fmtMoney("GBP", ihsRes.ihsTotalGbp);
+  if (els.ihsQuickCalc) els.ihsQuickCalc.textContent = buildIhsQuickCalc(ihsRes);
   if (els.ihsVisaDuration) {
     const months = Number(res.ihs.totalStayMonths || 0);
     const days = Number(res.ihs.totalStayDays || 0);
@@ -1028,11 +1405,12 @@ async function updateIhsQuick(){
       ? `${blocks} x 6-month blocks`
       : "-";
   }
-  updateIhsLiveBox(res.ihs);
-  highlightRuleRow(res.ihs.visaStartRule);
-  highlightWrapRow(res.ihs.courseCategory);
-  updateIhsTimeline(els.ihsQuickTimeline, res.ihs, els.applicationDate?.value || getTodayISO());
-  if (els.isPreSessional && res.ihs && Number(res.ihs.courseMonths) >= 6) {
+  updateIhsLiveBox(ihsRes);
+  highlightRuleRow(ihsRes.visaStartRule);
+  highlightWrapRow(ihsRes.courseCategory);
+  updateIhsTimeline(els.ihsQuickTimeline, ihsRes, els.applicationDate?.value || getTodayISO());
+  await updateIhsScenario(ihsRes);
+  if (els.isPreSessional && ihsRes && Number(ihsRes.courseMonths) >= 6) {
     els.isPreSessional.title = "Ignored for courses 6 months or longer.";
   } else if (els.isPreSessional) {
     els.isPreSessional.title = "";
@@ -1054,11 +1432,25 @@ async function calculateInternal(allowAlert){
   if (cached && (Date.now() - cached.ts) < 15000) {
     return await renderReport(cached.out, body);
   }
-  const out = await apiFetch("/api/report", { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify(body) }).then(r=>r.json());
-  if (out.error) { if (allowAlert) alert(out.error); return; }
-  calculateInternal._cache.set(cacheKey, { out, ts: Date.now() });
-
-  return await renderReport(out, body);
+  setBusy(true, "calc");
+  try {
+    const out = await apiFetch("/api/report", { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify(body) }).then(r=>r.json());    
+    if (out.error) {
+      if (allowAlert) alert(out.error);
+      else showErrors([out.error]);
+      showToast(out.error);
+      return;
+    }
+    calculateInternal._cache.set(cacheKey, { out, ts: Date.now() });
+    return await renderReport(out, body);
+  } catch (e) {
+    const msg = String(e?.message || e);
+    if (allowAlert) alert(msg);
+    else showErrors([msg]);
+    showToast(msg);
+  } finally {
+    setBusy(false);
+  }
 }
 
 async function renderReport(out, body){
@@ -1079,13 +1471,29 @@ async function renderReport(out, body){
   updateIhsLiveBox(out.ihs);
   highlightRuleRow(out.ihs.visaStartRule);
   highlightWrapRow(out.ihs.courseCategory);
-  if (els.visaFeeGbp) els.visaFeeGbp.textContent = fmtMoney("GBP", CONFIG?.fees?.visa_application_fee_gbp || 0);
-  if (els.ihsTotalGbp) els.ihsTotalGbp.textContent = fmtMoney("GBP", out.ihs.ihsTotalGbp);
-  if (els.visaServiceTypeOut) els.visaServiceTypeOut.textContent = serviceTypeLabel(out.ihs.visaServiceType);
-  if (els.visaDecisionDaysOut) els.visaDecisionDaysOut.textContent = `${out.ihs.decisionDays || "-"} working days`;
+  const visaFeeBase = CONFIG?.fees?.visa_application_fee_gbp || 0;
+  const visaFee = visaFeeWithServiceType(visaFeeBase, out.ihs.visaServiceType);
+  if (els.visaFeeGbp) els.visaFeeGbp.textContent = fmtDualMoney(visaFee, quote, gbpToQuote);
+  if (els.ihsTotalGbp) els.ihsTotalGbp.textContent = fmtDualMoney(out.ihs.ihsTotalGbp, quote, gbpToQuote);
+  if (els.visaServiceDecisionOut) {
+    const decision = out.ihs.decisionDays ? `${out.ihs.decisionDays} working days` : "-";
+    els.visaServiceDecisionOut.textContent = `${serviceTypeLabel(out.ihs.visaServiceType)} / ${decision}`;
+  }
   if (els.grantDateOut) {
     const grant = out.ihs.grantDate ? formatDateDisplay(out.ihs.grantDate) : "-";
     els.grantDateOut.textContent = out.ihs.grantDateEstimated ? `${grant} (estimated)` : grant;
+  }
+  if (els.visaStartOut) {
+    const start = out.ihs.visaStartDate ? new Date(out.ihs.visaStartDate) : null;
+    els.visaStartOut.textContent = start && !Number.isNaN(start.getTime())
+      ? formatDateDisplay(start)
+      : "-";
+  }
+  if (els.visaEndOut) {
+    const end = out.ihs.visaEndDate ? new Date(out.ihs.visaEndDate) : null;
+    els.visaEndOut.textContent = end && !Number.isNaN(end.getTime())
+      ? formatDateDisplay(end)
+      : "-";
   }
   els.ihsFx.textContent = `${fmtMoney(quote, out.ihs.ihsTotalGbp * gbpToQuote)} (1 GBP = ${gbpToQuote.toFixed(4)} ${quote})`;
 
@@ -1106,11 +1514,25 @@ async function renderReport(out, body){
     els.eligibilityStatus.classList.add(ok ? "eligible" : "noteligible");
   }
 
-  els.bTuition.textContent = fmtMoney("GBP", out.fundsRequired.tuitionDueGbp);
-  els.bStudent.textContent = fmtMoney("GBP", out.fundsRequired.maintenanceStudentGbp);
-  els.bDeps.textContent = fmtMoney("GBP", out.fundsRequired.maintenanceDependantsGbp);
-  els.bBuffer.textContent = fmtMoney("GBP", out.fundsRequired.bufferGbp);
-  els.bTotal.textContent = fmtMoney("GBP", out.fundsRequired.fundsRequiredGbp);
+  const tuitionTotalGbp = out.fundsRequired.tuitionTotalGbp || 0;
+  const tuitionPaidGbp = out.fundsRequired.tuitionPaidGbp || 0;
+  const scholarshipGbp = out.fundsRequired.scholarshipGbp || 0;
+  if (els.bTuitionTotalGbp) els.bTuitionTotalGbp.textContent = fmtMoney("GBP", tuitionTotalGbp);
+  if (els.bTuitionTotalFx) els.bTuitionTotalFx.textContent = fmtMoney(quote, tuitionTotalGbp * gbpToQuote);
+  if (els.bTuitionPaidGbp) els.bTuitionPaidGbp.textContent = fmtMoney("GBP", tuitionPaidGbp);
+  if (els.bTuitionPaidFx) els.bTuitionPaidFx.textContent = fmtMoney(quote, tuitionPaidGbp * gbpToQuote);
+  if (els.bScholarshipGbp) els.bScholarshipGbp.textContent = fmtMoney("GBP", scholarshipGbp);
+  if (els.bScholarshipFx) els.bScholarshipFx.textContent = fmtMoney(quote, scholarshipGbp * gbpToQuote);
+  if (els.bTuition) els.bTuition.textContent = fmtMoney("GBP", out.fundsRequired.tuitionDueGbp);
+  if (els.bTuitionFx) els.bTuitionFx.textContent = fmtMoney(quote, out.fundsRequired.tuitionDueGbp * gbpToQuote);
+  if (els.bStudent) els.bStudent.textContent = fmtMoney("GBP", out.fundsRequired.maintenanceStudentGbp);
+  if (els.bStudentFx) els.bStudentFx.textContent = fmtMoney(quote, out.fundsRequired.maintenanceStudentGbp * gbpToQuote);
+  if (els.bDeps) els.bDeps.textContent = fmtMoney("GBP", out.fundsRequired.maintenanceDependantsGbp);
+  if (els.bDepsFx) els.bDepsFx.textContent = fmtMoney(quote, out.fundsRequired.maintenanceDependantsGbp * gbpToQuote);
+  if (els.bBuffer) els.bBuffer.textContent = fmtMoney("GBP", out.fundsRequired.bufferGbp);
+  if (els.bBufferFx) els.bBufferFx.textContent = fmtMoney(quote, out.fundsRequired.bufferGbp * gbpToQuote);
+  if (els.bTotal) els.bTotal.textContent = fmtMoney("GBP", out.fundsRequired.fundsRequiredGbp);
+  if (els.bTotalFx) els.bTotalFx.textContent = fmtMoney(quote, out.fundsRequired.fundsRequiredGbp * gbpToQuote);
 
   els.fundsAvailBreakBody.innerHTML = "";
   const fundTypeLabel = (t) => {
@@ -1119,9 +1541,9 @@ async function renderReport(out, body){
     if (ft === "loan") return "Education loan";
     return "Bank statement";
   };
-  if (out.fundsAvailable.summary.skipped) {
+  if (!out.fundsAvailable.rows.length) {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td colspan="9">Funds section skipped by user.</td>`;
+    tr.innerHTML = `<td colspan="9">No funds added.</td>`;
     els.fundsAvailBreakBody.appendChild(tr);
   } else {
     out.fundsAvailable.rows.forEach(r=>{
@@ -1146,7 +1568,7 @@ async function renderReport(out, body){
   // Validation/Warn panel
   const s = out.fundsAvailable.summary;
   const warns = [];
-  if (s.skipped) warns.push("Funds section skipped - available funds treated as GBP 0.");
+  if (!out.fundsAvailable.rows.length) warns.push("No funds added - available funds treated as GBP 0.");
   if (body.applicationDateDefaulted) warns.push("Application date defaulted to today.");
   if (!s.hasApplicationDate) warns.push("Application date not provided - freshness checks are NOT verified.");
   warns.push("31-day statement freshness is checked only for bank statements when the visa application date is entered.");
@@ -1164,10 +1586,7 @@ async function renderReport(out, body){
       r.issues.forEach((i) => issues.set(i, (issues.get(i) || 0) + 1));
     });
     const top = [...issues.entries()].sort((a, b) => b[1] - a[1]);
-    if (s.skipped) {
-      els.issueSummary.style.display = "block";
-      els.issueSummary.innerHTML = "<strong>Issue summary:</strong> Funds section skipped by user.";
-    } else if (top.length) {
+    if (top.length) {
       els.issueSummary.style.display = "block";
       els.issueSummary.innerHTML = "<strong>Issue summary:</strong><br>" + top.map(([msg, count]) => `- ${escapeHtml(msg)} (${count})`).join("<br>");
     } else {
@@ -1187,6 +1606,8 @@ async function renderReport(out, body){
 async function calculateAuto(){
   await calculateInternal(false);
 }
+
+const updateIhsQuickDebounced = debounce(updateIhsQuick, 400);
 
 function escapeHtml(str){
   return String(str).replace(/[&<>"']/g, s => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[s]));
@@ -1233,36 +1654,42 @@ async function downloadPdf(){
   const err = validateCore();
   if (err) { alert(err); return; }
 
-  const res = await apiFetch("/api/pdf", { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify(payload()) });
-  if (!res.ok) {
-    const t = await res.text();
-    alert("PDF error: " + t);
-    return;
-  }
-  const blob = await res.blob();
-  const filename = buildPdfFilename();
-  if (window.showSaveFilePicker) {
-    try {
-      const handle = await window.showSaveFilePicker({
-        suggestedName: filename,
-        types: [{ description: "PDF", accept: { "application/pdf": [".pdf"] } }]
-      });
-      const writable = await handle.createWritable();
-      await writable.write(blob);
-      await writable.close();
+  setBusy(true, "pdf");
+  try {
+    const res = await apiFetch("/api/pdf", { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify(payload()) });
+    if (!res.ok) {
+      const t = await res.text();
+      alert("PDF error: " + t);
+      showToast(`PDF error: ${t || "Request failed."}`);
       return;
-    } catch (e) {
-      // user cancelled or unsupported; fall back
     }
+    const blob = await res.blob();
+    const filename = buildPdfFilename();
+    if (window.showSaveFilePicker) {
+      try {
+        const handle = await window.showSaveFilePicker({
+          suggestedName: filename,
+          types: [{ description: "PDF", accept: { "application/pdf": [".pdf"] } }]
+        });
+        const writable = await handle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+        return;
+      } catch (e) {
+        // user cancelled or unsupported; fall back
+      }
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } finally {
+    setBusy(false);
   }
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
 }
 
 function resetAll(){
@@ -1292,10 +1719,9 @@ function resetAll(){
 
   // Funds rows
   els.fundsTbody.innerHTML = "";
-  if (els.fundsSkip) els.fundsSkip.checked = false;
 
   // Results placeholders
-  ["ihsGbp","ihsCalc","ihsFx","ihsQuickGbp","ihsQuickCalc","ihsVisaDuration","ihsChargeableBlocks","fundsReqGbp","fundsReqFx","fundsAvailGbp","fundsAvailFx","gapGbp","gapFx","bTuition","bStudent","bDeps","bBuffer","bTotal","visaFeeGbp","ihsTotalGbp","visaServiceTypeOut","visaDecisionDaysOut","grantDateOut"]
+  ["ihsGbp","ihsCalc","ihsFx","ihsQuickGbp","ihsQuickCalc","ihsVisaDuration","ihsChargeableBlocks","ihsIncreaseDate","ihsIncreaseApplyBy","ihsIncreaseTotal","ihsIncreaseGrantDate","ihsIncreaseMessage","ihsCurrentTotal","ihsCurrentApplyFrom","ihsCurrentApplyUntil","ihsCurrentGrantFrom","ihsCurrentGrantUntil","ihsApplyNotBefore","ihsMinGrantFrom","ihsMinGrantUntil","ihsMinVisaStartFrom","ihsMinVisaStartUntil","ihsMinApplyFrom","ihsMinApplyUntil","ihsMinTotal","ihsCurrentText","ihsHigherText","ihsLowerText","ihsNotBeforeText","fundsReqGbp","fundsReqFx","fundsAvailGbp","fundsAvailFx","gapGbp","gapFx","bTuition","bStudent","bDeps","bBuffer","bTotal","visaFeeGbp","ihsTotalGbp","visaServiceDecisionOut","grantDateOut","visaStartOut","visaEndOut","bTuitionTotalGbp","bTuitionTotalFx","bTuitionPaidGbp","bTuitionPaidFx","bScholarshipGbp","bScholarshipFx","bTuitionFx","bStudentFx","bDepsFx","bBufferFx","bTotalFx"]
     .forEach(id => $(id).textContent = "-");
   if (els.ihsCourseCategory) els.ihsCourseCategory.textContent = "-";
   if (els.ihsGrantDate) els.ihsGrantDate.value = "-";
@@ -1328,25 +1754,24 @@ function resetAll(){
   if (els.counselorSuggest) els.counselorSuggest.style.display = "none";
 
   showErrors([]);
-  toggleFundsSkip();
 }
 
 els.btnCalc.addEventListener("click", calculate);
 els.btnPdf.addEventListener("click", downloadPdf);
 els.btnReset.addEventListener("click", resetAll);
 
-if (els.courseStart) els.courseStart.addEventListener("change", updateIhsQuick);
-if (els.courseEnd) els.courseEnd.addEventListener("change", updateIhsQuick);
-if (els.applicationDate) els.applicationDate.addEventListener("change", updateIhsQuick);
-if (els.intendedTravelDate) els.intendedTravelDate.addEventListener("change", updateIhsQuick);
-if (els.isPreSessional) els.isPreSessional.addEventListener("change", updateIhsQuick);
+if (els.courseStart) els.courseStart.addEventListener("change", updateIhsQuickDebounced);
+if (els.courseEnd) els.courseEnd.addEventListener("change", updateIhsQuickDebounced);
+if (els.applicationDate) els.applicationDate.addEventListener("change", updateIhsQuickDebounced);
+if (els.intendedTravelDate) els.intendedTravelDate.addEventListener("change", updateIhsQuickDebounced);
+if (els.isPreSessional) els.isPreSessional.addEventListener("change", updateIhsQuickDebounced);
 if (els.visaServiceType) {
   els.visaServiceType.addEventListener("change", () => {
     syncDecisionDays(true);
-    updateIhsQuick();
+    updateIhsQuickDebounced();
   });
 }
-if (els.visaDecisionDays) els.visaDecisionDays.addEventListener("change", updateIhsQuick);
+if (els.visaDecisionDays) els.visaDecisionDays.addEventListener("change", updateIhsQuickDebounced);
 
 document.querySelectorAll("[data-date]").forEach((btn) => {
   btn.addEventListener("click", () => applyDatePreset(btn.getAttribute("data-date") || ""));
@@ -1424,8 +1849,7 @@ function initAccessCode(){
 initAccessCode();
 initStudentSearch();
 initCounselorSearch();
-toggleFundsSkip();
-updateIhsQuick();
+updateIhsQuickDebounced();
 loadSyncStatus();
 setInterval(loadSyncStatus, 5 * 60 * 1000);
 

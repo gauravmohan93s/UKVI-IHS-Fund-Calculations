@@ -41,11 +41,7 @@ Known issues (blockers)
 - None confirmed after the 2026-01-07 fix pass; verify in staging if any edge cases remain.
 
 Recommended fixes (first pass)
-- Fix `getFx` signature to accept `manualFx`, and pass it from `/api/fx`, `/api/report`, and `/api/pdf`.
-- Correct `/api/report` gap calculation to use `fundsAvail.summary.totalEligibleGbp` and/or `totalAllGbp`.
-- Remove duplicate IDs in `public/index.html` and align `public/app.js` with the actual input elements.
-- Remove duplicate/unused functions in `public/app.js` and standardize the university search flow.
-- Normalize encoding (UTF-8) to remove stray characters in UI text.
+- Review `/api/report` gap calculation to ensure `fundsAvail.summary.totalEligibleGbp` and `totalAllGbp` outputs align with business expectations.
 
 Roadmap alignment (from brief)
 - Phase 1: FX caching, retries, PDF layout stability, university list sync
@@ -56,5 +52,6 @@ Progress log (manual updates)
 - 2026-01-07: Initial static review completed; blockers documented.
 - 2026-01-07: Fixed FX/manual fallback, UI ID collisions, missing handlers, and encoding issues; ran `node --check` on `server.js` and `public/app.js`.
 - 2026-01-08: Updated IHS calculation workflow to include grant-date estimation (working-day decision time), intended-travel clamping, and ST 25.3 rule path highlighting. Rebuilt the IHS page layout with timeline + scenario strip and added rule source link and wrap-up table visibility.
+- 2026-01-13: Added config fetch fallback + local config cache, aligned app version with `package.json`, optimized student/counselor lookup matching, and added busy-state UI with toast notifications.
 
 
