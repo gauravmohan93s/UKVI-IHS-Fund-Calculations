@@ -12,6 +12,7 @@ How it works (high level)
   - Funds required (tuition + maintenance + dependants)
   - Funds available (FX conversion + 28-day + 31-day checks)
   - PDF generation (client or internal view)
+  - IHS grant/timeline logic aligned to Appendix Student ST 25.3 and decision-time defaults
 
 Runtime
 - Start: `npm start` (Node 18+)
@@ -22,11 +23,15 @@ Key inputs
 - University (auto maps London vs outside London)
 - Course start/end dates
 - Visa application date (required for 31-day check)
+- Intended travel date (used only when grant is < 1 month before course start)
+- Visa service type + decision time (estimates grant date)
+- Pre-sessional toggle (only relevant for courses under 6 months)
 - Fees paid/waiver/dependants
 - Bank statement rows (currency, balance, dates)
 
 Key outputs
 - IHS total
+- Visa duration + 6-month chargeable blocks (IHS rounding basis)
 - Funds required (GBP)
 - Funds available (eligible vs all)
 - Eligibility status + gap
@@ -50,3 +55,6 @@ Roadmap alignment (from brief)
 Progress log (manual updates)
 - 2026-01-07: Initial static review completed; blockers documented.
 - 2026-01-07: Fixed FX/manual fallback, UI ID collisions, missing handlers, and encoding issues; ran `node --check` on `server.js` and `public/app.js`.
+- 2026-01-08: Updated IHS calculation workflow to include grant-date estimation (working-day decision time), intended-travel clamping, and ST 25.3 rule path highlighting. Rebuilt the IHS page layout with timeline + scenario strip and added rule source link and wrap-up table visibility.
+
+

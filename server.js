@@ -437,6 +437,29 @@ function addMonthsExcel(dateStr, months){
   return target;
 }
 
+function addDays(dateStr, days){
+  if (!dateStr) return null;
+  const d = dateStr instanceof Date ? new Date(dateStr) : new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return null;
+  const out = new Date(d.getTime());
+  out.setDate(out.getDate() + Number(days || 0));
+  return out;
+}
+
+function addWorkingDays(dateStr, days){
+  if (!dateStr) return null;
+  const d = dateStr instanceof Date ? new Date(dateStr) : new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return null;
+  let remaining = Math.max(0, Math.floor(Number(days || 0)));
+  const out = new Date(d.getTime());
+  while (remaining > 0) {
+    out.setDate(out.getDate() + 1);
+    const day = out.getDay();
+    if (day !== 0 && day !== 6) remaining -= 1;
+  }
+  return out;
+}
+
 function datedifMonths(startDate, endDate){
   if (!startDate || !endDate) return 0;
   const s = new Date(startDate);
@@ -739,21 +762,130 @@ async function calcFundsAvailable(payload, rules){
 function computeIhsBlock(payload, config, dependantsEffective){
   const courseStart = payload.courseStart;
   const courseEnd = payload.courseEnd;
-  const visaEndDate = addMonthsExcel(courseEnd, 4);
-  const visaEndIso = formatDateISO(visaEndDate);
   const applyingFrom = payload.applyingFrom || "outside";
+  const isPreSessional = Boolean(payload.isPreSessional);
+  const applicationDate = payload.applicationDate || todayISOInIST();
+  const applicationDateDefaulted = Boolean(payload.applicationDateDefaulted) || !payload.applicationDate;
+  const visaServiceType = String(payload.visaServiceType || "standard").toLowerCase();
+  const decisionDefaults = {
+    standard: 20,
+    priority: 5,
+    "super-priority": 1,
+    "super priority": 1,
+    superpriority: 1,
+    super_priority: 1
+  };
+  const decisionDefault = decisionDefaults[visaServiceType] ?? 20;
+  const decisionDaysRaw = Number(payload.visaDecisionDays);
+  const decisionDays = (Number.isFinite(decisionDaysRaw) && decisionDaysRaw > 0)
+    ? Math.floor(decisionDaysRaw)
+    : decisionDefault;
+  const decisionDaysSafe = Math.max(1, decisionDays || decisionDefault || 1);
+  const decisionDaysDefaulted = !(decisionDaysRaw > 0);
 
-  let totalStayDays = 0;
-  if (courseStart && visaEndDate) {
-    const cs = new Date(courseStart);
-    if (!Number.isNaN(cs.getTime())) {
-      totalStayDays = Math.floor((visaEndDate - cs) / 86400000) + 1;
+  const cs = courseStart ? new Date(courseStart) : null;
+  const ce = courseEnd ? new Date(courseEnd) : null;
+  const courseStartOk = cs && !Number.isNaN(cs.getTime());
+  const courseEndOk = ce && !Number.isNaN(ce.getTime());
+  const courseDays = (courseStartOk && courseEndOk)
+    ? (Math.floor((ce - cs) / 86400000) + 1)
+    : 0;
+  const courseMonthsBase = datedifMonths(courseStart, courseEnd);
+  const courseMonths = (courseStartOk && courseEndOk)
+    ? Math.max(0, courseMonthsBase + (ce.getDate() >= cs.getDate() ? 1 : 0))
+    : 0;
+
+  let preWrapMonths = 0;
+  let preWrapDays = 0;
+  let postWrapMonths = 0;
+  let postWrapDays = 0;
+  let courseCategory = "Unknown";
+  if (courseMonths >= 12) {
+    preWrapMonths = 1;
+    postWrapMonths = 4;
+    courseCategory = "Course of 12 months or longer";
+  } else if (courseMonths >= 6) {
+    preWrapMonths = 1;
+    postWrapMonths = 2;
+    courseCategory = "Course of 6 months or longer but shorter than 12 months";
+  } else if (isPreSessional) {
+    preWrapMonths = 1;
+    postWrapMonths = 1;
+    courseCategory = "Pre-sessional course of less than 6 months";
+  } else {
+    preWrapDays = 7;
+    postWrapDays = 7;
+    courseCategory = "Course of less than 6 months (not pre-sessional)";
+  }
+
+  const wrapLabel = (months, days) => {
+    if (months && months > 0) return `${months} month${months > 1 ? "s" : ""}`;
+    return `${days} day${days > 1 ? "s" : ""}`;
+  };
+  const preWrapLabel = wrapLabel(preWrapMonths, preWrapDays);
+  const postWrapLabel = wrapLabel(postWrapMonths, postWrapDays);
+
+  const grantBase = new Date(applicationDate);
+  const grantDateOk = !Number.isNaN(grantBase.getTime());
+  const grantDate = grantDateOk ? addWorkingDays(grantBase, decisionDaysSafe) : null;
+  const grantDateIso = grantDate ? formatDateISO(grantDate) : "";
+
+  let intendedTravelDate = null;
+  let intendedTravelDefaulted = false;
+  let intendedTravelAdjusted = false;
+  let intendedTravelAdjustedReason = "";
+  if (payload.intendedTravelDate) {
+    const candidate = new Date(payload.intendedTravelDate);
+    if (!Number.isNaN(candidate.getTime())) {
+      intendedTravelDate = candidate;
+    } else {
+      intendedTravelDefaulted = true;
     }
   }
-  const datedifM = datedifMonths(courseStart, visaEndIso);
-  const startDay = courseStart ? new Date(courseStart).getDate() : 0;
-  const endDay = visaEndDate ? visaEndDate.getDate() : 0;
-  const totalStayMonths = Math.max(0, datedifM + (endDay > startDay ? 1 : 0));
+  if (!intendedTravelDate && courseStartOk) {
+    intendedTravelDefaulted = true;
+    intendedTravelDate = preWrapDays > 0
+      ? addDays(cs, -preWrapDays)
+      : addMonthsExcel(courseStart, -1);
+  }
+  if (intendedTravelDate && grantDate && intendedTravelDate < grantDate) {
+    intendedTravelDate = new Date(grantDate.getTime());
+    intendedTravelAdjusted = true;
+    intendedTravelAdjustedReason = "Adjusted to grant date";
+  }
+  const intendedTravelIso = intendedTravelDate ? formatDateISO(intendedTravelDate) : "";
+
+  const oneMonthBeforeCourse = courseStartOk ? addMonthsExcel(courseStart, -1) : null;
+  const sevenDaysBeforeTravel = intendedTravelDate ? addDays(intendedTravelDate, -7) : null;
+
+  let visaStartDate = null;
+  let visaStartRule = "ST 25.3(a)";
+  if (grantDateOk && oneMonthBeforeCourse && grantDate <= oneMonthBeforeCourse) {
+    visaStartDate = preWrapDays > 0 ? addDays(cs, -preWrapDays) : addMonthsExcel(courseStart, -preWrapMonths);
+    visaStartRule = "ST 25.3(a): grant >= 1 month before course start";
+  } else if (grantDateOk && sevenDaysBeforeTravel && grantDate <= sevenDaysBeforeTravel) {
+    visaStartDate = sevenDaysBeforeTravel;
+    visaStartRule = "ST 25.3(b): grant < 1 month before course start";
+  } else if (grantDateOk) {
+    visaStartDate = grantDate;
+    visaStartRule = "ST 25.3(c): grant < 7 days before intended travel";
+  } else if (courseStartOk) {
+    visaStartDate = preWrapDays > 0 ? addDays(cs, -preWrapDays) : addMonthsExcel(courseStart, -preWrapMonths);
+    visaStartRule = "ST 25.3(a): grant date unavailable";
+  }
+
+  const visaEndDate = courseEndOk
+    ? (postWrapDays > 0 ? addDays(ce, postWrapDays) : addMonthsExcel(courseEnd, postWrapMonths))
+    : null;
+  const visaStartIso = formatDateISO(visaStartDate);
+  const visaEndIso = formatDateISO(visaEndDate);
+
+  let totalStayDays = 0;
+  if (visaStartDate && visaEndDate) {
+    totalStayDays = Math.max(0, Math.floor((visaEndDate - visaStartDate) / 86400000) + 1);
+  }
+  const ihsMonthsRaw = monthsForIHS(visaStartIso, visaEndIso);
+  const totalStayMonths = Number.isFinite(ihsMonthsRaw) ? ihsMonthsRaw : 0;
 
   const chargeableUnits = Math.max(0, Math.ceil(totalStayMonths / 6));
   const fullYears = Math.floor(chargeableUnits / 2);
@@ -767,7 +899,26 @@ function computeIhsBlock(payload, config, dependantsEffective){
     ihsPerPersonGbp: round2(ihsPerPerson),
     persons,
     ihsTotalGbp: round2(ihsPerPerson * persons),
+    courseStart,
+    courseEnd,
+    visaStartDate: visaStartIso,
     visaEndDate: visaEndIso,
+    visaStartRule,
+    intendedTravelDate: intendedTravelIso,
+    intendedTravelDefaulted,
+    intendedTravelAdjusted,
+    intendedTravelAdjustedReason,
+    grantDate: grantDateIso,
+    grantDateDefaulted: applicationDateDefaulted || !grantDateOk,
+    grantDateEstimated: true,
+    visaServiceType,
+    decisionDays,
+    decisionDaysDefaulted,
+    courseCategory,
+    courseMonths,
+    courseDays,
+    preWrapLabel,
+    postWrapLabel,
     totalStayDays: Math.max(0, totalStayDays),
     totalStayMonths,
     chargeableUnits,
@@ -1319,6 +1470,10 @@ app.post("/api/pdf", async (req, res) => {
       { label: "Study location", value: normalizeRegion(payload.region || "outside_london") === "london" ? "London" : "Outside London" },
       { label: "Course dates", value: courseDates },
       { label: "Visa application", value: formatDateDisplay(payload.applicationDate) },
+      { label: "Visa service type", value: ihs.visaServiceType ? String(ihs.visaServiceType).replace("-", " ") : "-" },
+      { label: "Decision time", value: ihs.decisionDays ? `${ihs.decisionDays} working days` : "-" },
+      { label: "Intended travel", value: formatDateDisplay(payload.intendedTravelDate || ihs.intendedTravelDate) },
+      { label: "Pre-sessional course", value: payload.isPreSessional ? "Yes" : "No" },
       { label: "Display currency", value: fxAvailable ? quote : "GBP (FX unavailable)" },
     ];
     const studentRows = [
@@ -1367,7 +1522,12 @@ app.post("/api/pdf", async (req, res) => {
       { section: true, label: "Visa" },
       { label: "Visa application fee", valueParts: dualInline(visaFeeGbp) },
       { section: true, label: "IHS" },
+      { label: "Course category", value: ihs.courseCategory || "-" },
+      { label: "Wrap-up periods", value: `${ihs.preWrapLabel} before / ${ihs.postWrapLabel} after` },
+      { label: "Estimated grant date", value: ihs.grantDate ? `${formatDateDisplay(ihs.grantDate)} (estimated)` : "-" },
+      { label: "Visa start date", value: formatDateDisplay(ihs.visaStartDate) },
       { label: "Visa end date", value: formatDateDisplay(ihs.visaEndDate) },
+      { label: "Start rule", value: ihs.visaStartRule || "-" },
       { label: "Total stay", value: `${ihs.totalStayMonths} months (${ihs.totalStayDays} days)` },
       { label: "IHS calculation", value: ihsCalcText },
       { label: "IHS total", valueParts: dualInline(ihs.ihsTotalGbp) },

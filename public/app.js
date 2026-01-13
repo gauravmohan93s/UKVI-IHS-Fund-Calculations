@@ -18,6 +18,10 @@ const els = {
   courseStart: $("courseStart"),
   courseEnd: $("courseEnd"),
   applicationDate: $("applicationDate"),
+  visaServiceType: $("visaServiceType"),
+  visaDecisionDays: $("visaDecisionDays"),
+  intendedTravelDate: $("intendedTravelDate"),
+  isPreSessional: $("isPreSessional"),
   regionDisplay: $("regionDisplay"),
   quote: $("quote"),
   studentAck: $("studentAck"),
@@ -57,6 +61,17 @@ const els = {
   ihsFx: $("ihsFx"),
   ihsQuickGbp: $("ihsQuickGbp"),
   ihsQuickCalc: $("ihsQuickCalc"),
+  ihsCourseCategory: $("ihsCourseCategory"),
+  ihsGrantDate: $("ihsGrantDate"),
+  ihsTravelEffective: $("ihsTravelEffective"),
+  ihsQuickTimeline: $("ihsQuickTimeline"),
+  ihsVisaDuration: $("ihsVisaDuration"),
+  ihsChargeableBlocks: $("ihsChargeableBlocks"),
+  visaFeeGbp: $("visaFeeGbp"),
+  ihsTotalGbp: $("ihsTotalGbp"),
+  visaServiceTypeOut: $("visaServiceTypeOut"),
+  visaDecisionDaysOut: $("visaDecisionDaysOut"),
+  grantDateOut: $("grantDateOut"),
   fundsReqGbp: $("fundsReqGbp"),
   fundsReqFx: $("fundsReqFx"),
   fundsAvailGbp: $("fundsAvailGbp"),
@@ -175,6 +190,7 @@ function getTodayISO(){
 function setApplicationDate(value){
   if (!els.applicationDate) return;
   els.applicationDate.value = value;
+  updateIhsQuick();
 }
 
 function applyDatePreset(kind){
@@ -187,6 +203,28 @@ function applyDatePreset(kind){
   const d = new Date(base);
   d.setDate(d.getDate() - days);
   setApplicationDate(d.toISOString().slice(0, 10));
+}
+
+function serviceTypeLabel(type){
+  const t = String(type || "").toLowerCase();
+  if (t === "priority") return "Priority";
+  if (t === "super-priority" || t === "superpriority") return "Super Priority";
+  return "Standard";
+}
+
+function defaultDecisionDays(type){
+  const t = String(type || "").toLowerCase();
+  if (t === "priority") return 5;
+  if (t === "super-priority" || t === "superpriority") return 1;
+  return 20;
+}
+
+function syncDecisionDays(force){
+  if (!els.visaDecisionDays || !els.visaServiceType) return;
+  const current = Number(els.visaDecisionDays.value || 0);
+  if (!current || force) {
+    els.visaDecisionDays.value = defaultDecisionDays(els.visaServiceType.value);
+  }
 }
 
 function setUniversityByName(name){
@@ -466,7 +504,7 @@ async function loadConfig(){
           <tbody>
             <tr><td>Student</td><td>${fmtMoney("GBP", s.maintenance_monthly_gbp.london)}</td><td>${fmtMoney("GBP", s.maintenance_monthly_gbp.outside_london)}</td></tr>
             <tr><td>Dependants</td><td>${fmtMoney("GBP", s.dependant_monthly_gbp.london)}</td><td>${fmtMoney("GBP", s.dependant_monthly_gbp.outside_london)}</td></tr>
-            <tr><td>Child 16–17 (independent)</td><td>${fmtMoney("GBP", cs.maintenance_monthly_gbp.london)}</td><td>${fmtMoney("GBP", cs.maintenance_monthly_gbp.outside_london)}</td></tr>
+            <tr><td>Child 16-17 (independent)</td><td>${fmtMoney("GBP", cs.maintenance_monthly_gbp.london)}</td><td>${fmtMoney("GBP", cs.maintenance_monthly_gbp.outside_london)}</td></tr>
           </tbody>
         </table>
         <div class="rate-meta">Cap: ${s.max_months} months</div>
@@ -475,7 +513,7 @@ async function loadConfig(){
         <div class="rate-title">IHS rate</div>
         <div class="rate-list">
           <div><span class="rate-strong">Yearly:</span> ${fmtMoney("GBP", CONFIG.ihs.student_yearly_gbp)}</div>
-          <div><span class="rate-strong">Half‑year:</span> ${fmtMoney("GBP", CONFIG.ihs.half_year_gbp)}</div>
+          <div><span class="rate-strong">Half-year:</span> ${fmtMoney("GBP", CONFIG.ihs.half_year_gbp)}</div>
           <div><span class="rate-strong">Visa application fee:</span> ${fmtMoney("GBP", CONFIG.fees?.visa_application_fee_gbp || 0)}</div>
         </div>
       </div>
@@ -676,6 +714,9 @@ async function fx(from, to){
 
 function payload(){
   const overrides = parseFxOverrides(els.manualFxOverrides && els.manualFxOverrides.value);
+  const serviceType = els.visaServiceType ? els.visaServiceType.value : "standard";
+  const decisionRaw = Number(els.visaDecisionDays && els.visaDecisionDays.value || 0);
+  const decisionDays = decisionRaw > 0 ? decisionRaw : defaultDecisionDays(serviceType);
   return {
     routeKey: "student",
     universityName: els.universitySelect.value || "",
@@ -684,6 +725,10 @@ function payload(){
     courseEnd: els.courseEnd.value,
     applicationDate: els.applicationDate.value || getTodayISO(),
     applicationDateDefaulted: !els.applicationDate.value,
+    visaServiceType: serviceType,
+    visaDecisionDays: decisionDays,
+    intendedTravelDate: els.intendedTravelDate ? els.intendedTravelDate.value : "",
+    isPreSessional: Boolean(els.isPreSessional && els.isPreSessional.checked),
 
     studentAckNumber: (els.studentAck && els.studentAck.value) || (CURRENT_STUDENT && CURRENT_STUDENT.ackNumber) || "",
     studentName: (els.studentName && els.studentName.value) || (CURRENT_STUDENT && CURRENT_STUDENT.studentName) || "",
@@ -738,11 +783,6 @@ function validateTab(tabId){
   // clear previous highlights
   ["universityInput","courseStart","courseEnd","applicationDate"].forEach(id => markField($(id), false));
   if (tabId === "t1"){
-    const uniOk = Boolean(els.universitySelect.value);
-    markField(els.universityInput, !uniOk);
-    if (!uniOk) errs.push("Select a university.");
-    
-
     const sOk = Boolean(els.courseStart.value);
     const eOk = Boolean(els.courseEnd.value);
     if (!sOk) errs.push("Enter course start date (as per CAS).");
@@ -768,7 +808,6 @@ function validateTab(tabId){
   return errs.length === 0;
 }
 function validateCore(){
-  if (!els.universitySelect.value) return "Please choose a university from the suggestions.";
   if (!els.courseStart.value || !els.courseEnd.value) return "Please enter course start and end dates.";
   if (new Date(els.courseEnd.value) <= new Date(els.courseStart.value)) return "Course end date must be after the start date.";
   return null;
@@ -781,27 +820,223 @@ function buildIhsCalc(ihs){
   if (ihs.halfYearCharges > 0) parts.push(`${fmtMoney("GBP", ihs.rateHalfGbp)} x ${ihs.halfYearCharges} half-year${ihs.halfYearCharges > 1 ? "s" : ""}`);
   const perPerson = parts.length ? `${parts.join(" + ")} = ${fmtMoney("GBP", ihs.ihsPerPersonGbp)} per person` : "No IHS";
   const persons = ihs.persons ? `; x ${ihs.persons} person${ihs.persons > 1 ? "s" : ""}` : "";
+  const visaStartDate = ihs.visaStartDate ? new Date(ihs.visaStartDate) : null;
+  const visaStartLabel = visaStartDate && !Number.isNaN(visaStartDate.getTime())
+    ? formatDateDisplay(visaStartDate)
+    : (ihs.visaStartDate || "-");
   const visaDate = ihs.visaEndDate ? new Date(ihs.visaEndDate) : null;
   const visaLabel = visaDate && !Number.isNaN(visaDate.getTime())
     ? formatDateDisplay(visaDate)
     : (ihs.visaEndDate || "-");
-  return `Visa end: ${visaLabel} (${ihs.totalStayMonths} months), ${perPerson}${persons}`;
+  return `Visa start: ${visaStartLabel}; visa end: ${visaLabel} (${ihs.totalStayMonths} months), ${perPerson}${persons}`;
+}
+
+function buildIhsQuickCalc(ihs){
+  if (!ihs) return "-";
+  const parts = [];
+  if (ihs.yearlyCharges > 0) parts.push(`${fmtMoney("GBP", ihs.rateYearlyGbp)} x ${ihs.yearlyCharges} year${ihs.yearlyCharges > 1 ? "s" : ""}`);
+  if (ihs.halfYearCharges > 0) parts.push(`${fmtMoney("GBP", ihs.rateHalfGbp)} x ${ihs.halfYearCharges} half-year${ihs.halfYearCharges > 1 ? "s" : ""}`);
+  if (!parts.length) return "No IHS";
+  const perPerson = `${parts.join(" + ")} = ${fmtMoney("GBP", ihs.ihsPerPersonGbp)} per person`;
+  const persons = ihs.persons ? `; x ${ihs.persons} person${ihs.persons > 1 ? "s" : ""}` : "";
+  return `${perPerson}${persons}`;
+}
+
+function updateIhsLiveBox(ihs){
+  if (!ihs) return;
+  if (els.ihsCourseCategory) els.ihsCourseCategory.textContent = ihs.courseCategory || "-";
+  if (els.ihsGrantDate) {
+    const grant = ihs.grantDate ? formatDateDisplay(ihs.grantDate) : "-";
+    els.ihsGrantDate.value = ihs.grantDateEstimated ? `${grant} (estimated)` : grant;
+  }
+  if (els.ihsTravelEffective) {
+    if (ihs.intendedTravelDate) {
+      const flags = [];
+      if (ihs.intendedTravelDefaulted) flags.push("estimated");
+      if (ihs.intendedTravelAdjusted) flags.push("adjusted");
+      const suffix = flags.length ? ` (${flags.join(", ")})` : "";
+      els.ihsTravelEffective.value = `${formatDateDisplay(ihs.intendedTravelDate)}${suffix}`;
+    } else {
+      els.ihsTravelEffective.value = "-";
+    }
+  }
+}
+
+function highlightRuleRow(ruleText){
+  const table = document.getElementById("ihsRuleMatrix");
+  if (!table) return;
+  const rows = table.querySelectorAll("tbody tr");
+  rows.forEach(r => r.classList.remove("active-row"));
+  const key = String(ruleText || "").includes("(a)") ? "a"
+    : String(ruleText || "").includes("(b)") ? "b"
+    : String(ruleText || "").includes("(c)") ? "c"
+    : "";
+  if (!key) return;
+  const match = table.querySelector(`tbody tr[data-rule="${key}"]`);
+  if (match) match.classList.add("active-row");
+}
+
+function highlightWrapRow(courseCategory){
+  const wrapTable = document.getElementById("ihsWrapTable");
+  if (!wrapTable) return;
+  wrapTable.querySelectorAll("tbody tr").forEach(r => r.classList.remove("active-row"));
+  const category = String(courseCategory || "");
+  let key = "";
+  if (category.includes("12 months")) key = "12plus";
+  else if (category.includes("6 months or longer but shorter")) key = "6to12";
+  else if (category.includes("Pre-sessional")) key = "presess";
+  else if (category.includes("less than 6 months")) key = "under6";
+  if (!key) return;
+  const row = wrapTable.querySelector(`tbody tr[data-wrap="${key}"]`);
+  if (row) row.classList.add("active-row");
+}
+
+function daysInMonth(year, monthIndex){
+  return new Date(year, monthIndex + 1, 0).getDate();
+}
+
+function diffYmd(start, end){
+  if (!start || !end) return null;
+  let y = end.getFullYear() - start.getFullYear();
+  let m = end.getMonth() - start.getMonth();
+  let d = end.getDate() - start.getDate();
+  if (d < 0) {
+    m -= 1;
+    const prevMonth = (end.getMonth() - 1 + 12) % 12;
+    const prevYear = prevMonth === 11 ? end.getFullYear() - 1 : end.getFullYear();
+    d += daysInMonth(prevYear, prevMonth);
+  }
+  if (m < 0) {
+    y -= 1;
+    m += 12;
+  }
+  return { y: Math.max(0, y), m: Math.max(0, m), d: Math.max(0, d) };
+}
+
+function formatYmd(diff){
+  if (!diff) return "";
+  const parts = [];
+  if (diff.y) parts.push(`${diff.y}y`);
+  if (diff.m) parts.push(`${diff.m}m`);
+  if (diff.d) parts.push(`${diff.d}d`);
+  return parts.join(" ");
+}
+
+function mergeTimelineItems(items){
+  const map = new Map();
+  items.forEach((item) => {
+    if (!item.date || Number.isNaN(item.date.getTime())) return;
+    const key = item.date.toISOString().slice(0, 10);
+    if (!map.has(key)) map.set(key, { date: item.date, labels: [] });
+    map.get(key).labels.push(item.label);
+  });
+  return [...map.values()]
+    .sort((a, b) => a.date - b.date)
+    .map((x) => ({ date: x.date, label: x.labels.join(" / ") }));
+}
+
+function renderTimeline(container, items){
+  if (!container) return;
+  const merged = mergeTimelineItems(items);
+  if (!merged.length) {
+    container.innerHTML = "-";
+    return;
+  }
+  const iconFor = (label) => {
+    const l = String(label || "").toLowerCase();
+    if (l.includes("application")) {
+      return "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M6 2h7l5 5v15a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm7 1.5V8h4.5L13 3.5zM7 12h10v2H7v-2zm0 4h10v2H7v-2zm0-8h6v2H7V8z\"/></svg>";
+    }
+    if (l.includes("grant")) {
+      return "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M4 4h16v4H4V4zm0 6h16v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V10zm4 2v4h8v-4H8z\"/></svg>";
+    }
+    if (l.includes("visa start")) {
+      return "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M2 12l20-5-3 5 3 5-20-5zm6.5 0l-2.5 4v-3l-2-.5 2-.5v-3l2.5 4z\"/></svg>";
+    }
+    if (l.includes("visa end")) {
+      return "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M6 3v18h2v-6h7l1-2-1-2H8V3H6zm4 4h6v4h-6V7z\"/></svg>";
+    }
+    return "<svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"8\"/></svg>";
+  };
+  const nodes = [];
+  for (let i = 0; i < merged.length; i += 1) {
+    const item = merged[i];
+    nodes.push(
+      `<div class="timeline-node">
+        <div class="timeline-icon">${iconFor(item.label)}</div>
+        <div class="timeline-dot"></div>
+        <div class="timeline-label">${escapeHtml(item.label)}</div>
+        <div class="timeline-date">${escapeHtml(formatDateDisplay(item.date))}</div>
+      </div>`
+    );
+    const next = merged[i + 1];
+    if (next) {
+      const diff = diffYmd(item.date, next.date);
+      const gapLabel = formatYmd(diff);
+      if (gapLabel) nodes.push(`<div class="timeline-connector"><div>${escapeHtml(gapLabel)}</div></div>`);
+    }
+  }
+  container.innerHTML = nodes.join("");
+}
+
+function updateIhsTimeline(target, ihs, applicationDate){
+  const items = [
+    { label: "Application", date: applicationDate ? new Date(applicationDate) : null },
+    { label: "Grant", date: ihs?.grantDate ? new Date(ihs.grantDate) : null },
+    { label: "Visa start", date: ihs?.visaStartDate ? new Date(ihs.visaStartDate) : null },
+    { label: "Visa end", date: ihs?.visaEndDate ? new Date(ihs.visaEndDate) : null },
+  ];
+  renderTimeline(target, items);
 }
 
 async function updateIhsQuick(){
   if (!els.courseStart?.value || !els.courseEnd?.value) {
     if (els.ihsQuickGbp) els.ihsQuickGbp.textContent = "-";
     if (els.ihsQuickCalc) els.ihsQuickCalc.textContent = "-";
+    if (els.ihsVisaDuration) els.ihsVisaDuration.textContent = "-";
+    if (els.ihsChargeableBlocks) els.ihsChargeableBlocks.textContent = "-";
     return;
   }
+  syncDecisionDays(false);
   const res = await apiFetch("/api/ihs", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ courseStart: els.courseStart.value, courseEnd: els.courseEnd.value })
+    body: JSON.stringify({
+      courseStart: els.courseStart.value,
+      courseEnd: els.courseEnd.value,
+      applicationDate: els.applicationDate?.value || getTodayISO(),
+      applicationDateDefaulted: !els.applicationDate?.value,
+      visaServiceType: els.visaServiceType?.value || "standard",
+      visaDecisionDays: Number(els.visaDecisionDays && els.visaDecisionDays.value || 0),
+      intendedTravelDate: els.intendedTravelDate?.value || "",
+      isPreSessional: Boolean(els.isPreSessional && els.isPreSessional.checked)
+    })
   }).then(r => r.json());
   if (res.error) return;
   if (els.ihsQuickGbp) els.ihsQuickGbp.textContent = fmtMoney("GBP", res.ihs.ihsTotalGbp);
-  if (els.ihsQuickCalc) els.ihsQuickCalc.textContent = buildIhsCalc(res.ihs);
+  if (els.ihsQuickCalc) els.ihsQuickCalc.textContent = buildIhsQuickCalc(res.ihs);
+  if (els.ihsVisaDuration) {
+    const months = Number(res.ihs.totalStayMonths || 0);
+    const days = Number(res.ihs.totalStayDays || 0);
+    els.ihsVisaDuration.textContent = (months || days)
+      ? `${months} months (${days} days)`
+      : "-";
+  }
+  if (els.ihsChargeableBlocks) {
+    const blocks = Number(res.ihs.chargeableUnits);
+    els.ihsChargeableBlocks.textContent = Number.isFinite(blocks)
+      ? `${blocks} x 6-month blocks`
+      : "-";
+  }
+  updateIhsLiveBox(res.ihs);
+  highlightRuleRow(res.ihs.visaStartRule);
+  highlightWrapRow(res.ihs.courseCategory);
+  updateIhsTimeline(els.ihsQuickTimeline, res.ihs, els.applicationDate?.value || getTodayISO());
+  if (els.isPreSessional && res.ihs && Number(res.ihs.courseMonths) >= 6) {
+    els.isPreSessional.title = "Ignored for courses 6 months or longer.";
+  } else if (els.isPreSessional) {
+    els.isPreSessional.title = "";
+  }
 }
 
 async function calculate(){
@@ -841,6 +1076,17 @@ async function renderReport(out, body){
   if (els.gapLabel) els.gapLabel.textContent = gapLabel;
   els.ihsGbp.textContent = fmtMoney("GBP", out.ihs.ihsTotalGbp);
   if (els.ihsCalc) els.ihsCalc.textContent = buildIhsCalc(out.ihs);
+  updateIhsLiveBox(out.ihs);
+  highlightRuleRow(out.ihs.visaStartRule);
+  highlightWrapRow(out.ihs.courseCategory);
+  if (els.visaFeeGbp) els.visaFeeGbp.textContent = fmtMoney("GBP", CONFIG?.fees?.visa_application_fee_gbp || 0);
+  if (els.ihsTotalGbp) els.ihsTotalGbp.textContent = fmtMoney("GBP", out.ihs.ihsTotalGbp);
+  if (els.visaServiceTypeOut) els.visaServiceTypeOut.textContent = serviceTypeLabel(out.ihs.visaServiceType);
+  if (els.visaDecisionDaysOut) els.visaDecisionDaysOut.textContent = `${out.ihs.decisionDays || "-"} working days`;
+  if (els.grantDateOut) {
+    const grant = out.ihs.grantDate ? formatDateDisplay(out.ihs.grantDate) : "-";
+    els.grantDateOut.textContent = out.ihs.grantDateEstimated ? `${grant} (estimated)` : grant;
+  }
   els.ihsFx.textContent = `${fmtMoney(quote, out.ihs.ihsTotalGbp * gbpToQuote)} (1 GBP = ${gbpToQuote.toFixed(4)} ${quote})`;
 
   els.fundsReqGbp.textContent = fmtMoney("GBP", out.fundsRequired.fundsRequiredGbp);
@@ -1024,6 +1270,10 @@ function resetAll(){
   els.courseStart.value = "";
   els.courseEnd.value = "";
   els.applicationDate.value = "";
+  if (els.intendedTravelDate) els.intendedTravelDate.value = "";
+  if (els.isPreSessional) els.isPreSessional.checked = false;
+  if (els.visaServiceType) els.visaServiceType.value = "standard";
+  if (els.visaDecisionDays) els.visaDecisionDays.value = defaultDecisionDays("standard");
   if (els.universityInput) els.universityInput.value = "";
   els.universitySelect.value = "";
   SELECTED_REGION = "outside_london";
@@ -1045,8 +1295,12 @@ function resetAll(){
   if (els.fundsSkip) els.fundsSkip.checked = false;
 
   // Results placeholders
-  ["ihsGbp","ihsCalc","ihsFx","fundsReqGbp","fundsReqFx","fundsAvailGbp","fundsAvailFx","gapGbp","gapFx","bTuition","bStudent","bDeps","bBuffer","bTotal"]
+  ["ihsGbp","ihsCalc","ihsFx","ihsQuickGbp","ihsQuickCalc","ihsVisaDuration","ihsChargeableBlocks","fundsReqGbp","fundsReqFx","fundsAvailGbp","fundsAvailFx","gapGbp","gapFx","bTuition","bStudent","bDeps","bBuffer","bTotal","visaFeeGbp","ihsTotalGbp","visaServiceTypeOut","visaDecisionDaysOut","grantDateOut"]
     .forEach(id => $(id).textContent = "-");
+  if (els.ihsCourseCategory) els.ihsCourseCategory.textContent = "-";
+  if (els.ihsGrantDate) els.ihsGrantDate.value = "-";
+  if (els.ihsTravelEffective) els.ihsTravelEffective.value = "-";
+  if (els.ihsQuickTimeline) els.ihsQuickTimeline.innerHTML = "-";
   els.fundsAvailBreakBody.innerHTML = "";
   els.validationNote.textContent = "";
   if (els.issueSummary) {
@@ -1083,12 +1337,25 @@ els.btnReset.addEventListener("click", resetAll);
 
 if (els.courseStart) els.courseStart.addEventListener("change", updateIhsQuick);
 if (els.courseEnd) els.courseEnd.addEventListener("change", updateIhsQuick);
+if (els.applicationDate) els.applicationDate.addEventListener("change", updateIhsQuick);
+if (els.intendedTravelDate) els.intendedTravelDate.addEventListener("change", updateIhsQuick);
+if (els.isPreSessional) els.isPreSessional.addEventListener("change", updateIhsQuick);
+if (els.visaServiceType) {
+  els.visaServiceType.addEventListener("change", () => {
+    syncDecisionDays(true);
+    updateIhsQuick();
+  });
+}
+if (els.visaDecisionDays) els.visaDecisionDays.addEventListener("change", updateIhsQuick);
 
 document.querySelectorAll("[data-date]").forEach((btn) => {
   btn.addEventListener("click", () => applyDatePreset(btn.getAttribute("data-date") || ""));
 });
 
-loadConfig().then(()=>{ els.regionDisplay.value = "Outside London"; }).catch(()=> { if (els.ratePanel) els.ratePanel.textContent = "Could not load configuration."; });
+loadConfig().then(()=>{
+  els.regionDisplay.value = "Outside London";
+  syncDecisionDays(true);
+}).catch(()=> { if (els.ratePanel) els.ratePanel.textContent = "Could not load configuration."; });
 
 function formatIst(iso) {
   if (!iso) return "";
