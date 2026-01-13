@@ -1212,15 +1212,15 @@ app.post("/api/pdf", async (req, res) => {
     const pdfName = buildPdfFilename(payload);
     res.setHeader("Content-Disposition", `attachment; filename="${pdfName}"`);
 
-    const doc = new PDFDocument({ size: "A4", margin: 42 });
+    const doc = new PDFDocument({ size: "A4", margin: 30 });
     doc.pipe(res);
 
     const b = config.branding || {};
     const c1 = b.primary_color || "#0b5cab";
     const c2 = b.secondary_color || "#00a3a3";
-    const margin = 42;
+    const margin = 30;
     const pageWidth = doc.page.width - margin * 2;
-    const headerHeight = 70;
+    const headerHeight = 64;
     const maxPages = pdfMode === "client" ? 1 : 2;
     let pageCount = 1;
 
@@ -1242,7 +1242,7 @@ app.post("/api/pdf", async (req, res) => {
       return s ? `${s}...` : "";
     };
 
-    const drawValue = (text, x, yPos, width, baseSize = 9, minSize = 7) => {
+    const drawValue = (text, x, yPos, width, baseSize = 8, minSize = 6) => {
       const raw = String(text ?? "-");
       let size = baseSize;
       doc.fontSize(size);
@@ -1267,13 +1267,13 @@ app.post("/api/pdf", async (req, res) => {
         // ignore logo errors
       }
 
-      doc.fillColor("#ffffff").fontSize(15).text(b.product_name || "UK Visa Calculation Report", margin, 16, { width: pageWidth, align: "center" });
-      doc.fontSize(9).text(b.company_name || "", margin, 34, { width: pageWidth, align: "center" });
+      doc.fillColor("#ffffff").fontSize(14).text(b.product_name || "UK Visa Calculation Report", margin, 16, { width: pageWidth, align: "center" });
+      doc.fontSize(8).text(b.company_name || "", margin, 34, { width: pageWidth, align: "center" });
       const fxStamp = lastFxFetchedAt ? `FX: ${formatDateTimeDisplay(lastFxFetchedAt)}` : "FX: -";
       const metaStamp = `v${APP_VERSION} | ${fxStamp}`;
-      doc.fontSize(8).fillColor("#e2e8f0")
+      doc.fontSize(7).fillColor("#e2e8f0")
         .text(`Generated: ${formatDateTimeDisplay(new Date())}`, margin, headerHeight - 22, { width: pageWidth, align: "right" });
-      doc.fontSize(8).fillColor("#e2e8f0")
+      doc.fontSize(7).fillColor("#e2e8f0")
         .text(metaStamp, margin, headerHeight - 10, { width: pageWidth, align: "right" });
 
       return headerHeight + 14;
@@ -1295,18 +1295,18 @@ app.post("/api/pdf", async (req, res) => {
     };
 
     const drawSummary = () => {
-      const boxH = 44;
+      const boxH = 40;
       if (!ensureSpace(boxH + 6)) return;
       doc.roundedRect(margin, y, pageWidth, boxH, 10).fill(ok ? "#dcfce7" : "#fee2e2");
-      doc.fillColor(ok ? "#065f46" : "#7f1d1d").fontSize(11)
+      doc.fillColor(ok ? "#065f46" : "#7f1d1d").fontSize(10)
         .text(ok ? "Result: ELIGIBLE (Funds are sufficient)" : "Result: NOT ELIGIBLE (Funds are short)", margin + 10, y + 6, { width: pageWidth - 20 });
 
       const colW = (pageWidth - 20) / 2;
       const leftX = margin + 10;
       const rightX = margin + 10 + colW;
-      doc.fillColor("#0f172a").fontSize(9)
+      doc.fillColor("#0f172a").fontSize(8)
         .text(`Required: ${fmtGBP(fundsReq.fundsRequiredGbp)} (${fmtQuote(fundsReq.fundsRequiredGbp)})`, leftX, y + 24, { width: colW - 6 });
-      doc.fillColor("#0f172a").fontSize(9)
+      doc.fillColor("#0f172a").fontSize(8)
         .text(`Eligible available: ${fmtGBP(fundsAvail.summary.totalEligibleGbp)} (${fmtQuote(fundsAvail.summary.totalEligibleGbp)})`, rightX, y + 24, { width: colW - 6 });
       y += boxH + 8;
       doc.fillColor("#000000");
@@ -1321,30 +1321,30 @@ app.post("/api/pdf", async (req, res) => {
       rows.forEach((row) => {
         const label = String(row.label ?? "-");
         if (row.section) {
-          doc.fontSize(8);
+          doc.fontSize(7);
           const sh = doc.heightOfString(label, { width: w - paddingX * 2 });
           height += sh + 6;
           return;
         }
         const value = String(row.value ?? "-");
-        doc.fontSize(7);
+        doc.fontSize(6);
         const lh = doc.heightOfString(label, { width: labelW });
         if (row.valueParts && row.valueParts.singleLine) {
-          doc.fontSize(9);
+          doc.fontSize(8);
           const vh = doc.heightOfString(row.valueParts.primary || "-", { width: valueW, align: "right" });
           height += Math.max(lh, vh) + 4;
           return;
         }
         if (value.includes("\n")) {
           const [v1, v2] = value.split("\n");
-          doc.fontSize(9);
-          const h1 = doc.heightOfString(v1 || "-", { width: valueW, align: "right" });
           doc.fontSize(8);
+          const h1 = doc.heightOfString(v1 || "-", { width: valueW, align: "right" });
+          doc.fontSize(7);
           const h2 = doc.heightOfString(v2 || "-", { width: valueW, align: "right" });
           height += Math.max(lh, h1 + h2 + 2) + 4;
           return;
         }
-        doc.fontSize(9);
+        doc.fontSize(8);
         const vh = doc.heightOfString(value, { width: valueW, align: "right" });
         height += Math.max(lh, vh) + 4;
       });
@@ -1354,7 +1354,7 @@ app.post("/api/pdf", async (req, res) => {
     const drawKeyValueBox = (x, boxY, w, h, title, rows, labelRatio = 0.58) => {
       doc.roundedRect(x, boxY, w, h, 8).fill("#f8fafc");
       doc.strokeColor("#e2e8f0").lineWidth(1).roundedRect(x, boxY, w, h, 8).stroke();
-      doc.fillColor("#0f172a").fontSize(10).text(title, x + 10, boxY + 4, { width: w - 20, align: "left" });
+      doc.fillColor("#0f172a").fontSize(9).text(title, x + 10, boxY + 4, { width: w - 20, align: "left" });
 
       const paddingX = 10;
       const headerH = 14;
@@ -1364,7 +1364,7 @@ app.post("/api/pdf", async (req, res) => {
       rows.forEach((row) => {
         const label = String(row.label ?? "-");
         if (row.section) {
-          doc.fontSize(8).fillColor("#334155").text(label, x + paddingX, ry, { width: w - paddingX * 2, align: "right" });
+          doc.fontSize(7).fillColor("#334155").text(label, x + paddingX, ry, { width: w - paddingX * 2, align: "right" });
           const sh = doc.heightOfString(label, { width: w - paddingX * 2 });
           ry += sh + 4;
           doc.strokeColor("#e2e8f0").lineWidth(0.5).moveTo(x + paddingX, ry).lineTo(x + w - paddingX, ry).stroke();
@@ -1372,20 +1372,20 @@ app.post("/api/pdf", async (req, res) => {
           return;
         }
         const value = String(row.value ?? "-");
-        doc.fontSize(7).fillColor("#64748b").text(label, x + paddingX, ry, { width: labelW });
+        doc.fontSize(6).fillColor("#64748b").text(label, x + paddingX, ry, { width: labelW });
         if (row.valueParts && row.valueParts.singleLine) {
           const primary = String(row.valueParts.primary || "-");
           const secondary = String(row.valueParts.secondary || "-");
           const sep = " | ";
-          doc.fontSize(9);
-          const w1 = doc.widthOfString(primary);
           doc.fontSize(8);
+          const w1 = doc.widthOfString(primary);
+          doc.fontSize(7);
           const w2 = doc.widthOfString(secondary);
           const wSep = doc.widthOfString(sep);
           const totalW = w1 + wSep + w2;
           const startX = x + paddingX + labelW + Math.max(0, valueW - totalW);
-          doc.fontSize(9).fillColor(row.valueColor || "#0f172a").text(primary, startX, ry, { lineBreak: false });
-          doc.fontSize(8).fillColor("#64748b").text(sep + secondary, startX + w1, ry, { lineBreak: false });
+          doc.fontSize(8).fillColor(row.valueColor || "#0f172a").text(primary, startX, ry, { lineBreak: false });
+          doc.fontSize(7).fillColor("#64748b").text(sep + secondary, startX + w1, ry, { lineBreak: false });
           const lh = doc.heightOfString(label, { width: labelW });
           const vh = doc.heightOfString(primary, { width: valueW, align: "right" });
           ry += Math.max(lh, vh) + 4;
@@ -1393,15 +1393,15 @@ app.post("/api/pdf", async (req, res) => {
         }
         if (value.includes("\n")) {
           const [v1, v2] = value.split("\n");
-          doc.fontSize(9).fillColor(row.valueColor || "#0f172a").text(v1 || "-", x + paddingX + labelW, ry, { width: valueW, align: "right" });
+          doc.fontSize(8).fillColor(row.valueColor || "#0f172a").text(v1 || "-", x + paddingX + labelW, ry, { width: valueW, align: "right" });
           const h1 = doc.heightOfString(v1 || "-", { width: valueW, align: "right" });
-          doc.fontSize(8).fillColor("#64748b").text(v2 || "-", x + paddingX + labelW, ry + h1 + 2, { width: valueW, align: "right" });
+          doc.fontSize(7).fillColor("#64748b").text(v2 || "-", x + paddingX + labelW, ry + h1 + 2, { width: valueW, align: "right" });
           const h2 = doc.heightOfString(v2 || "-", { width: valueW, align: "right" });
           const lh = doc.heightOfString(label, { width: labelW });
           ry += Math.max(lh, h1 + h2 + 2) + 4;
           return;
         }
-        doc.fontSize(9).fillColor(row.valueColor || "#0f172a").text(value, x + paddingX + labelW, ry, { width: valueW, align: "right" });
+        doc.fontSize(8).fillColor(row.valueColor || "#0f172a").text(value, x + paddingX + labelW, ry, { width: valueW, align: "right" });
         const lh = doc.heightOfString(label, { width: labelW });
         const vh = doc.heightOfString(value, { width: valueW, align: "right" });
         ry += Math.max(lh, vh) + 4;
@@ -1433,13 +1433,13 @@ app.post("/api/pdf", async (req, res) => {
 
       doc.roundedRect(x, boxY, w, height, 8).fill("#f8fafc");
       doc.strokeColor("#e2e8f0").lineWidth(1).roundedRect(x, boxY, w, height, 8).stroke();
-      doc.fillColor("#0f172a").fontSize(10).text(title, x + 10, boxY + 6);
+      doc.fillColor("#0f172a").fontSize(9).text(title, x + 10, boxY + 6);
 
       let ry = boxY + headerH;
       rows.forEach((r) => {
         const leftText = `${r.leftLabel}: ${r.leftValue || "-"}`;
         const rightText = `${r.rightLabel}: ${r.rightValue || "-"}`;
-        doc.fontSize(8).fillColor("#0f172a").text(leftText, x + paddingX, ry, { width: colW });
+        doc.fontSize(7).fillColor("#0f172a").text(leftText, x + paddingX, ry, { width: colW });
         doc.text(rightText, x + paddingX + colW + colGap, ry, { width: colW });
         const lh = doc.heightOfString(leftText, { width: colW });
         const rh = doc.heightOfString(rightText, { width: colW });
@@ -1448,8 +1448,8 @@ app.post("/api/pdf", async (req, res) => {
     };
 
     const drawFundsTable = (rows) => {
-      const headerH = 14;
-      const rowH = 9;
+      const headerH = 12;
+      const rowH = 8;
       const cols = [
         { title: "OK", width: 20, align: "center" },
         { title: "Type", width: 60, align: "center" },
@@ -1462,7 +1462,7 @@ app.post("/api/pdf", async (req, res) => {
 
       if (!ensureSpace(headerH + rowH + 4)) return;
       doc.roundedRect(margin, y, pageWidth, headerH, 6).fill("#f1f5f9");
-      doc.fillColor("#334155").fontSize(7);
+      doc.fillColor("#334155").fontSize(6);
       let x = margin + 6;
       cols.forEach((c) => {
         doc.text(c.title, x, y + 4, { width: c.width, align: c.align || "left" });
@@ -1477,7 +1477,7 @@ app.post("/api/pdf", async (req, res) => {
         return "Bank";
       };
 
-      doc.fontSize(7);
+      doc.fontSize(6);
       rows.forEach((r) => {
         const okTxt = r.eligible ? "OK" : "NO";
         const issuesText = (r.issues || []).join("; ") || "-";
@@ -1640,8 +1640,8 @@ app.post("/api/pdf", async (req, res) => {
         if (ensureSpace(issueBoxH)) {
           doc.roundedRect(margin, y, pageWidth, issueBoxH, 8).fill("#fff7ed");
           doc.strokeColor("#fed7aa").lineWidth(1).roundedRect(margin, y, pageWidth, issueBoxH, 8).stroke();
-          doc.fillColor("#9a3412").fontSize(9).text("Issue summary", margin + 10, y + 6);
-          doc.fillColor("#7c2d12").fontSize(8).text(issueText, margin + 10, y + 18, { width: pageWidth - 20 });
+          doc.fillColor("#9a3412").fontSize(8).text("Issue summary", margin + 10, y + 6);
+          doc.fillColor("#7c2d12").fontSize(7).text(issueText, margin + 10, y + 18, { width: pageWidth - 20 });
           y += issueBoxH + 8;
         }
       }
@@ -1669,11 +1669,12 @@ app.post("/api/pdf", async (req, res) => {
       `Bank statements: funds must be held for ${config.rules.funds_hold_days} consecutive days and end within ${config.rules.statement_age_days} days of the visa application date.\n` +
       `FDs: maturity date required (28/31-day checks not applied). Education loans: disbursement letter should be within ${config.rules.loan_letter_max_age_days ?? 180} days of the application.\n` +
       `Visa application date defaults to today if not provided.`;
-    const rulesHeight = 22;
+    y += 8;
+    const rulesHeight = doc.heightOfString(ruleText, { width: pageWidth });
     if (y + rulesHeight > bottomLimit()) {
       y = bottomLimit() - rulesHeight;
     }
-    doc.fillColor("#475569").fontSize(7).text(ruleText, margin, y, { width: pageWidth });
+    doc.fillColor("#475569").fontSize(6).text(ruleText, margin, y, { width: pageWidth });
     y += 10;
 
     // PDF footer intentionally omitted per requirements.
