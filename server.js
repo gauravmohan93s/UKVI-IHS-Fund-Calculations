@@ -57,6 +57,8 @@ const DATA_DIR = process.env.DATA_DIR || DEFAULT_DATA_DIR;
 const AUDIT_LOG_PATH = process.env.AUDIT_LOG_PATH || path.join(DATA_DIR, "audit.log");
 const AUDIT_LOG_MAX_BYTES = Number(process.env.AUDIT_LOG_MAX_BYTES || 5 * 1024 * 1024);
 const AUDIT_LOG_RETENTION = Number(process.env.AUDIT_LOG_RETENTION || 10);
+const AUDIT_WEBHOOK_URL = process.env.AUDIT_WEBHOOK_URL || "";
+const AUDIT_WEBHOOK_TIMEOUT_MS = Number(process.env.AUDIT_WEBHOOK_TIMEOUT_MS || 4000);
 let auditDirReady = false;
 async function ensureAuditDir() {
   if (auditDirReady) return;
@@ -86,6 +88,24 @@ async function rotateAuditIfNeeded() {
   }
 }
 
+async function sendAuditWebhook(record) {
+  if (!AUDIT_WEBHOOK_URL) return;
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), AUDIT_WEBHOOK_TIMEOUT_MS);
+  try {
+    await fetch(AUDIT_WEBHOOK_URL, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(record),
+      signal: ctrl.signal
+    });
+  } catch (_) {
+    // ignore webhook errors
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 function auditEvent(event, req, extra = {}) {
   const record = {
     ts: new Date().toISOString(),
@@ -101,6 +121,7 @@ function auditEvent(event, req, extra = {}) {
     .then(() => rotateAuditIfNeeded())
     .then(() => fs.promises.appendFile(AUDIT_LOG_PATH, `${JSON.stringify(record)}\n`))
     .catch((e) => console.warn(`Audit log write failed: ${e?.message || e}`));
+  sendAuditWebhook(record);
 }
 
 app.use((req, res, next) => {
