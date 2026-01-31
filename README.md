@@ -155,6 +155,10 @@ Funds rows include statement start/end; app marks each row eligible/ineligible a
 Add a GitHub Actions secret named `RENDER_URL` (e.g. `https://your-app.onrender.com`).
 The workflow in `.github/workflows/keepalive.yml` pings `/healthz` every 10 minutes.
 
+Steps:
+1) GitHub repo → Settings → Secrets and variables → Actions
+2) New repository secret: `RENDER_URL` = your base Render URL (no `/healthz`)
+
 ## Student + counselor lookups (optional)
 Place files in `data/` (or override with env vars):
 
