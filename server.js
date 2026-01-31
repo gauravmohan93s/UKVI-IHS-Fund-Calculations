@@ -1,10 +1,11 @@
 import express from "express";
 import morgan from "morgan";
+import compression from "compression";
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
 import { fileURLToPath } from "url";
 import PDFDocument from "pdfkit";
-import XLSX from "xlsx";
 import { parse as parseCsv } from "csv-parse/sync";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -12,7 +13,32 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 app.use(morgan("dev"));
+app.use(compression());
 app.use(express.json({ limit: "2mb" }));
+
+// --- Correlation ID + request timing ---
+app.use((req, res, next) => {
+  const incoming = String(req.header("x-correlation-id") || "").trim();
+  req.correlationId = incoming || crypto.randomUUID();
+  res.setHeader("x-correlation-id", req.correlationId);
+  req._startAt = Date.now();
+  res.on("finish", () => {
+    const durationMs = Date.now() - req._startAt;
+    const log = {
+      ts: new Date().toISOString(),
+      level: "info",
+      type: "request",
+      correlationId: req.correlationId,
+      method: req.method,
+      path: req.originalUrl || req.url,
+      status: res.statusCode,
+      durationMs,
+      ip: req.ip
+    };
+    console.log(JSON.stringify(log));
+  });
+  next();
+});
 
 // --- Simple access-code gate (optional)
 // Enable by setting config.access.enabled=true or ACCESS_ENABLED=true.
@@ -26,6 +52,57 @@ function getAccessCode(config){
   return { enabled, code };
 }
 
+const DEFAULT_DATA_DIR = fs.existsSync("/var/data") ? "/var/data" : path.join(__dirname, "data");
+const DATA_DIR = process.env.DATA_DIR || DEFAULT_DATA_DIR;
+const AUDIT_LOG_PATH = process.env.AUDIT_LOG_PATH || path.join(DATA_DIR, "audit.log");
+const AUDIT_LOG_MAX_BYTES = Number(process.env.AUDIT_LOG_MAX_BYTES || 5 * 1024 * 1024);
+const AUDIT_LOG_RETENTION = Number(process.env.AUDIT_LOG_RETENTION || 10);
+let auditDirReady = false;
+async function ensureAuditDir() {
+  if (auditDirReady) return;
+  await fs.promises.mkdir(path.dirname(AUDIT_LOG_PATH), { recursive: true });
+  auditDirReady = true;
+}
+
+async function rotateAuditIfNeeded() {
+  if (!Number.isFinite(AUDIT_LOG_MAX_BYTES) || AUDIT_LOG_MAX_BYTES <= 0) return;
+  try {
+    const stat = await fs.promises.stat(AUDIT_LOG_PATH);
+    if (stat.size < AUDIT_LOG_MAX_BYTES) return;
+    const ts = new Date().toISOString().replace(/[:.]/g, "-");
+    const rotated = `${AUDIT_LOG_PATH}.${ts}`;
+    await fs.promises.rename(AUDIT_LOG_PATH, rotated);
+    const dir = path.dirname(AUDIT_LOG_PATH);
+    const base = path.basename(AUDIT_LOG_PATH);
+    const files = (await fs.promises.readdir(dir))
+      .filter((f) => f.startsWith(base + "."))
+      .map((f) => ({ f, p: path.join(dir, f) }))
+      .sort((a, b) => b.f.localeCompare(a.f));
+    for (let i = AUDIT_LOG_RETENTION; i < files.length; i += 1) {
+      await fs.promises.unlink(files[i].p);
+    }
+  } catch (_) {
+    // ignore rotation errors
+  }
+}
+
+function auditEvent(event, req, extra = {}) {
+  const record = {
+    ts: new Date().toISOString(),
+    event,
+    correlationId: req?.correlationId || "",
+    method: req?.method || "",
+    path: req?.originalUrl || req?.url || "",
+    ip: req?.ip || "",
+    accessCode: String(req?.header("x-access-code") || "").trim(),
+    ...extra
+  };
+  ensureAuditDir()
+    .then(() => rotateAuditIfNeeded())
+    .then(() => fs.promises.appendFile(AUDIT_LOG_PATH, `${JSON.stringify(record)}\n`))
+    .catch((e) => console.warn(`Audit log write failed: ${e?.message || e}`));
+}
+
 app.use((req, res, next) => {
   if (!req.path.startsWith("/api/")) return next();
   if (req.path === "/api/config") return next(); // allow UI to load
@@ -36,16 +113,43 @@ app.use((req, res, next) => {
   const provided = String(req.header("x-access-code") || "").trim();
   if (code && provided === code) return next();
 
+  auditEvent("auth_failed", req, { reason: "invalid_access_code" });
   return res.status(401).json({ error: "Unauthorized: invalid access code" });
 });
 
-app.use(express.static(path.join(__dirname, "public")));
+const PUBLIC_DIR = path.join(__dirname, "public");
 
-const LOCAL_CONFIG_PATH = path.join(__dirname, "data", "ukvi_config.json");
+// Prefer minified assets when available
+app.use((req, res, next) => {
+  if (req.path === "/app.js") {
+    const minPath = path.join(PUBLIC_DIR, "app.min.js");
+    if (fs.existsSync(minPath)) req.url = "/app.min.js";
+  } else if (req.path === "/styles.css") {
+    const minPath = path.join(PUBLIC_DIR, "styles.min.css");
+    if (fs.existsSync(minPath)) req.url = "/styles.min.css";
+  }
+  next();
+});
+
+app.use(express.static(PUBLIC_DIR, {
+  maxAge: "1d",
+  etag: true,
+  lastModified: true,
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith(".html")) {
+      res.setHeader("Cache-Control", "no-cache");
+    }
+    if (filePath.endsWith(".min.js") || filePath.endsWith(".min.css")) {
+      res.setHeader("Cache-Control", "public, max-age=604800");
+    }
+  }
+}));
+
+const LOCAL_CONFIG_PATH = path.join(DATA_DIR, "ukvi_config.json");
 const CONFIG_URL = process.env.CONFIG_URL || ""; // optional remote JSON        
-const STUDENTS_XLSX_PATH = process.env.STUDENTS_XLSX_PATH || path.join(__dirname, "data", "students.xlsx");
-const COUNSELORS_CSV_PATH = process.env.COUNSELORS_CSV_PATH || path.join(__dirname, "data", "counselors.csv");
-const COUNTRY_CURRENCY_PATH = path.join(__dirname, "data", "country_currency.json");
+const STUDENTS_CSV_PATH = process.env.STUDENTS_CSV_PATH || path.join(DATA_DIR, "students.csv");
+const COUNSELORS_CSV_PATH = process.env.COUNSELORS_CSV_PATH || path.join(DATA_DIR, "counselors.csv");
+const COUNTRY_CURRENCY_PATH = path.join(DATA_DIR, "country_currency.json");
 const DATA_SYNC_ENABLED = String(process.env.DATA_SYNC_ENABLED || "true").toLowerCase() === "true";
 const STUDENTS_SOURCE_URL = process.env.STUDENTS_SOURCE_URL || "";
 const COUNSELORS_SOURCE_URL = process.env.COUNSELORS_SOURCE_URL || "";
@@ -57,6 +161,7 @@ const STUDENTS_SYNC_MIN_AGE_MINUTES = Number(process.env.STUDENTS_SYNC_MIN_AGE_M
 const COUNSELORS_SYNC_MIN_AGE_MINUTES = Number(process.env.COUNSELORS_SYNC_MIN_AGE_MINUTES || 0);
 const COUNTRY_CURRENCY_SYNC_MIN_AGE_MINUTES = Number(process.env.COUNTRY_CURRENCY_SYNC_MIN_AGE_MINUTES || 0);
 const TEAMS_WEBHOOK_URL = process.env.TEAMS_WEBHOOK_URL || "";
+const CONFIG_CACHE_MS = Number(process.env.CONFIG_CACHE_MS || 5 * 60 * 1000);
 const APP_VERSION = (() => {
   try {
     const pkgPath = path.join(__dirname, "package.json");
@@ -92,6 +197,28 @@ function normalizeLower(val) {
 }
 
 const studentsCache = { mtimeMs: 0, rows: [] };
+const studentsIndex = new Map();
+const studentsQueryCache = new Map();
+const counselorsQueryCache = new Map();
+const QUERY_CACHE_MS = Number(process.env.QUERY_CACHE_MS || 5 * 60 * 1000);
+const QUERY_CACHE_MAX = Number(process.env.QUERY_CACHE_MAX || 200);
+
+function getQueryCache(cache, key) {
+  const hit = cache.get(key);
+  if (!hit) return null;
+  if (Date.now() - hit.ts > QUERY_CACHE_MS) {
+    cache.delete(key);
+    return null;
+  }
+  return hit.items;
+}
+
+function setQueryCache(cache, key, items) {
+  cache.set(key, { items, ts: Date.now() });
+  if (cache.size <= QUERY_CACHE_MAX) return;
+  const firstKey = cache.keys().next().value;
+  if (firstKey) cache.delete(firstKey);
+}
 function normalizeKeyMap(row) {
   const out = {};
   Object.entries(row || {}).forEach(([k, v]) => {
@@ -105,15 +232,31 @@ function normalizeKeyMap(row) {
   return out;
 }
 
+function buildPrefixIndex(rows, getters, prefixLen = 3) {
+  const index = new Map();
+  rows.forEach((r) => {
+    getters.forEach((g) => {
+      const raw = g(r);
+      if (!raw) return;
+      const s = String(raw).toLowerCase();
+      if (!s) return;
+      const key = s.slice(0, prefixLen);
+      if (!key) return;
+      const list = index.get(key) || [];
+      list.push(r);
+      index.set(key, list);
+    });
+  });
+  return index;
+}
+
 function loadStudents() {
-  if (!fs.existsSync(STUDENTS_XLSX_PATH)) return [];
-  const stat = fs.statSync(STUDENTS_XLSX_PATH);
+  if (!fs.existsSync(STUDENTS_CSV_PATH)) return [];
+  const stat = fs.statSync(STUDENTS_CSV_PATH);
   if (stat.mtimeMs === studentsCache.mtimeMs) return studentsCache.rows;
 
-  const wb = XLSX.readFile(STUDENTS_XLSX_PATH);
-  const sheetName = wb.SheetNames[0];
-  const sheet = wb.Sheets[sheetName];
-  const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+  const csv = fs.readFileSync(STUDENTS_CSV_PATH, "utf-8");
+  const rows = parseCsv(csv, { columns: true, skip_empty_lines: true, bom: true });
 
   const mapped = rows.map((r) => {
     const n = normalizeKeyMap(r);
@@ -190,10 +333,14 @@ function loadStudents() {
 
   studentsCache.mtimeMs = stat.mtimeMs;
   studentsCache.rows = mapped;
+  const nextIndex = buildPrefixIndex(mapped, [(r) => r.ackLower, (r) => r.studentNameLower], 3);
+  studentsIndex.clear();
+  nextIndex.forEach((v, k) => studentsIndex.set(k, v));
   return mapped;
 }
 
 const counselorsCache = { mtimeMs: 0, rows: [] };
+const counselorsIndex = new Map();
 function loadCounselors() {
   if (!fs.existsSync(COUNSELORS_CSV_PATH)) return [];
   const stat = fs.statSync(COUNSELORS_CSV_PATH);
@@ -223,6 +370,9 @@ function loadCounselors() {
 
   counselorsCache.mtimeMs = stat.mtimeMs;
   counselorsCache.rows = mapped;
+  const nextIndex = buildPrefixIndex(mapped, [(r) => r.nameLower, (r) => r.emailLower, (r) => r.employeeIdLower], 3);
+  counselorsIndex.clear();
+  nextIndex.forEach((v, k) => counselorsIndex.set(k, v));
   return mapped;
 }
 
@@ -320,6 +470,8 @@ async function downloadToFile(name, url, destPath) {
     await fs.promises.mkdir(path.dirname(destPath), { recursive: true });
     await fs.promises.writeFile(tmpPath, res.buffer);
     await fs.promises.rename(tmpPath, destPath);
+    if (name === "students") loadStudents();
+    if (name === "counselors") loadCounselors();
     syncState.set(url, {
       etag: res.etag,
       lastModified: res.lastModified,
@@ -474,6 +626,61 @@ function round2(x){ return Math.round((x + Number.EPSILON) * 100) / 100; }
 function round6(x){ return Math.round((x + Number.EPSILON) * 1e6) / 1e6; }
 function daysBetween(d1, d2){ return Math.max(0, Math.ceil((new Date(d2) - new Date(d1)) / 86400000)); }
 
+// --- Config cache ---
+const remoteConfigCache = { fetchedAt: 0, data: null, source: "local", configUrl: "", error: "" };
+let remoteConfigPromise = null;
+
+async function getConfigMerged() {
+  const local = readLocalConfig();
+  const countryCurrency = readCountryCurrency();
+  if (!CONFIG_URL) {
+    return { config: { ...local, country_currency: countryCurrency }, source: "local" };
+  }
+  const now = Date.now();
+  if (remoteConfigCache.data && (now - remoteConfigCache.fetchedAt) < CONFIG_CACHE_MS) {
+    return {
+      config: remoteConfigCache.data,
+      source: remoteConfigCache.source,
+      config_url: remoteConfigCache.configUrl,
+      error: remoteConfigCache.error
+    };
+  }
+  if (remoteConfigPromise) return remoteConfigPromise;
+  remoteConfigPromise = (async () => {
+    try {
+      const remote = await fetchJson(CONFIG_URL, 8000);
+      const merged = {
+        ...local,
+        ...remote,
+        routes: { ...local.routes, ...(remote.routes || {}) },
+        rules: { ...local.rules, ...(remote.rules || {}) },
+        ihs: { ...local.ihs, ...(remote.ihs || {}) },
+        fees: { ...local.fees, ...(remote.fees || {}) },
+        fx: { ...local.fx, ...(remote.fx || {}) },
+        universities: remote.universities || local.universities,
+        country_currency: { ...(local.country_currency || {}), ...(remote.country_currency || {}), ...countryCurrency }
+      };
+      remoteConfigCache.fetchedAt = Date.now();
+      remoteConfigCache.data = merged;
+      remoteConfigCache.source = "remote";
+      remoteConfigCache.configUrl = CONFIG_URL;
+      remoteConfigCache.error = "";
+      return { config: merged, source: "remote", config_url: CONFIG_URL };
+    } catch (e) {
+      const fallback = { ...local, country_currency: countryCurrency };
+      remoteConfigCache.fetchedAt = Date.now();
+      remoteConfigCache.data = fallback;
+      remoteConfigCache.source = "local-fallback";
+      remoteConfigCache.configUrl = CONFIG_URL;
+      remoteConfigCache.error = String(e?.message || e);
+      return { config: fallback, source: "local-fallback", config_url: CONFIG_URL, error: remoteConfigCache.error };
+    } finally {
+      remoteConfigPromise = null;
+    }
+  })();
+  return remoteConfigPromise;
+}
+
 function monthsForMaintenance(startDate, endDate, maxMonths){
   const days = daysBetween(startDate, endDate);
   const m = Math.max(1, Math.ceil(days / 30.44));
@@ -616,8 +823,9 @@ function calcFundsRequired(payload, config){
 
   const tuitionTotal = safeNum(payload.tuitionFeeTotalGbp);
   const tuitionPaid = safeNum(payload.tuitionFeePaidGbp);
+  const tuitionAdditional = safeNum(payload.tuitionFeeAdditionalGbp);
   const scholarship = safeNum(payload.scholarshipGbp);
-  const tuitionDue = Math.max(0, tuitionTotal - tuitionPaid - scholarship);
+  const tuitionDue = Math.max(0, tuitionTotal - tuitionPaid - scholarship - tuitionAdditional);
 
   const studentMonthly = route.maintenance_monthly_gbp[region];
   const maintenanceStudent = months * studentMonthly;
@@ -638,6 +846,7 @@ function calcFundsRequired(payload, config){
     routeKey, region, monthsRequired: months,
     tuitionTotalGbp: round2(tuitionTotal),
     tuitionPaidGbp: round2(tuitionPaid),
+    tuitionAdditionalGbp: round2(tuitionAdditional),
     scholarshipGbp: round2(scholarship),
     tuitionDueGbp: round2(tuitionDue),
     maintenanceStudentGbp: round2(maintenanceStudent),
@@ -648,7 +857,7 @@ function calcFundsRequired(payload, config){
   };
 }
 
-async function calcFundsAvailable(payload, rules){
+async function calcFundsAvailable(payload, rules, includeRows = true){
   // rows: [{fundType, accountType, source, currency, amount, statementStart, statementEnd, fdMaturity, loanDisbursement}]
   const rows = Array.isArray(payload.fundsRows) ? payload.fundsRows : [];
   const applicationDate = payload.applicationDate ? new Date(payload.applicationDate) : null;
@@ -660,7 +869,9 @@ async function calcFundsAvailable(payload, rules){
   let totalAllGbp = 0;
   let totalEligibleGbp = 0;
 
-  const converted = [];
+  const converted = includeRows ? [] : null;
+  let anyRowMissingDates = false;
+  let anyIneligibleRows = false;
 
   const dayDiffInclusive = (startStr, endStr) => {
     if (!startStr || !endStr) return null;
@@ -765,24 +976,30 @@ async function calcFundsAvailable(payload, rules){
 
     const eligible = issues.length === 0 || issues.every(isAppDateWarning);
     if (eligible) totalEligibleGbp += gbp;
+    if (!eligible) anyIneligibleRows = true;
+    if (fundType === "fd" && !fdMaturity) anyRowMissingDates = true;
+    if (fundType === "loan" && !loanDisbursement) anyRowMissingDates = true;
+    if (fundType === "bank" && (!statementStart || !statementEnd)) anyRowMissingDates = true;
 
-    converted.push({
-      fundType,
-      accountType,
-      source,
-      currency,
-      amount: round2(amount),
-      statementStart,
-      statementEnd,
-      fdMaturity,
-      loanDisbursement,
-      dateLabel,
-      dateValue,
-      fxToGbp: round6(rate),
-      amountGbp: round2(gbp),
-      eligible,
-      issues
-    });
+    if (includeRows) {
+      converted.push({
+        fundType,
+        accountType,
+        source,
+        currency,
+        amount: round2(amount),
+        statementStart,
+        statementEnd,
+        fdMaturity,
+        loanDisbursement,
+        dateLabel,
+        dateValue,
+        fxToGbp: round6(rate),
+        amountGbp: round2(gbp),
+        eligible,
+        issues
+      });
+    }
   }
 
   const summary = {
@@ -792,16 +1009,13 @@ async function calcFundsAvailable(payload, rules){
     statementAgeDays,
     loanLetterMaxAgeDays,
     hasApplicationDate: !!applicationDate,
-    anyRowMissingDates: converted.some((r) => {
-      if (r.fundType === "fd") return !r.fdMaturity;
-      if (r.fundType === "loan") return !r.loanDisbursement;
-      return !r.statementStart || !r.statementEnd;
-    }),
-    anyIneligibleRows: converted.some(r => !r.eligible),
-    skipped: false
+    anyRowMissingDates,
+    anyIneligibleRows,
+    skipped: false,
+    detailsIncluded: includeRows
   };
 
-  return { summary, rows: converted };
+  return { summary, rows: includeRows ? converted : [] };
 }
 
 function computeIhsBlock(payload, config, dependantsEffective){
@@ -979,33 +1193,8 @@ function computeIhsBlock(payload, config, dependantsEffective){
 // --- APIs ---
 app.get("/api/config", async (req, res) => {
   try {
-    const local = readLocalConfig();
-    const countryCurrency = readCountryCurrency();
-    if (!CONFIG_URL) {
-      return res.json({ config: { ...local, country_currency: countryCurrency }, source: "local" });
-    }
-    try {
-      const remote = await fetchJson(CONFIG_URL, 8000);
-      const merged = {
-        ...local,
-        ...remote,
-        routes: { ...local.routes, ...(remote.routes || {}) },
-        rules: { ...local.rules, ...(remote.rules || {}) },
-        ihs: { ...local.ihs, ...(remote.ihs || {}) },
-        fees: { ...local.fees, ...(remote.fees || {}) },
-        fx: { ...local.fx, ...(remote.fx || {}) },
-        universities: remote.universities || local.universities,
-        country_currency: { ...(local.country_currency || {}), ...(remote.country_currency || {}), ...countryCurrency }
-      };
-      return res.json({ config: merged, source: "remote", config_url: CONFIG_URL });
-    } catch (e) {
-      return res.json({
-        config: { ...local, country_currency: countryCurrency },
-        source: "local-fallback",
-        config_url: CONFIG_URL,
-        error: String(e?.message || e)
-      });
-    }
+    const out = await getConfigMerged();
+    return res.json(out);
   } catch (e) {
     res.status(500).json({ error: String(e) });
   }
@@ -1014,23 +1203,33 @@ app.get("/api/config", async (req, res) => {
 app.get("/api/students", (req, res) => {
   const q = normalizeStr(req.query.q).toLowerCase();
   if (!q) return res.json({ items: [] });
+  const cached = getQueryCache(studentsQueryCache, q);
+  if (cached) return res.json({ items: cached });
   const rows = loadStudents();
-  const items = rows.filter((r) =>
+  const key = q.slice(0, 3);
+  const pool = studentsIndex.get(key) || rows;
+  const items = pool.filter((r) =>
     String(r.ackLower || "").includes(q) ||
     String(r.studentNameLower || "").includes(q)
   ).slice(0, 10);
+  setQueryCache(studentsQueryCache, q, items);
   res.json({ items });
 });
 
 app.get("/api/counselors", (req, res) => {
   const q = normalizeStr(req.query.q).toLowerCase();
   if (!q) return res.json({ items: [] });
+  const cached = getQueryCache(counselorsQueryCache, q);
+  if (cached) return res.json({ items: cached });
   const rows = loadCounselors();
-  const items = rows.filter((r) =>
+  const key = q.slice(0, 3);
+  const pool = counselorsIndex.get(key) || rows;
+  const items = pool.filter((r) =>
     String(r.nameLower || "").includes(q) ||
     String(r.emailLower || "").includes(q) ||
     String(r.employeeIdLower || "").includes(q)
   ).slice(0, 10);
+  setQueryCache(counselorsQueryCache, q, items);
   res.json({ items });
 });
 
@@ -1040,7 +1239,7 @@ app.get("/api/sync-status", (req, res) => {
   const countryMeta = syncMeta.get("country_currency") || {};
   res.json({
     serverTime: new Date().toISOString(),
-    students: { ...fileStatus(STUDENTS_XLSX_PATH), ...studentsMeta },
+    students: { ...fileStatus(STUDENTS_CSV_PATH), ...studentsMeta },
     counselors: { ...fileStatus(COUNSELORS_CSV_PATH), ...counselorsMeta },
     country_currency: { ...fileStatus(COUNTRY_CURRENCY_PATH), ...countryMeta }
   });
@@ -1058,8 +1257,8 @@ app.post("/api/sync", async (req, res) => {
     const skipped = [];
 
     if (STUDENTS_SOURCE_URL && (wantAll || wants.has("students"))) {
-      if (shouldSync("students", STUDENTS_XLSX_PATH, minAgeMs)) {
-        tasks.push(downloadToFile("students", STUDENTS_SOURCE_URL, STUDENTS_XLSX_PATH));
+      if (shouldSync("students", STUDENTS_CSV_PATH, minAgeMs)) {
+        tasks.push(downloadToFile("students", STUDENTS_SOURCE_URL, STUDENTS_CSV_PATH));
         picked.push("students");
       } else {
         skipped.push("students");
@@ -1084,12 +1283,14 @@ app.post("/api/sync", async (req, res) => {
 
     if (!tasks.length) {
       if (skipped.length) {
+        auditEvent("sync_started", req, { started: [], skipped, min_age_minutes: minAgeMinutes });
         return res.json({ ok: true, targets: [], skipped, min_age_minutes: minAgeMinutes });
       }
       return res.status(400).json({ error: "No valid sync targets configured." });
     }
 
     await Promise.all(tasks);
+    auditEvent("sync_started", req, { started: picked, skipped, min_age_minutes: minAgeMinutes });
     return res.json({ ok: true, targets: picked, skipped, min_age_minutes: minAgeMinutes });
   } catch (e) {
     return res.status(500).json({ error: String(e) });
@@ -1136,14 +1337,22 @@ app.post("/api/report", async (req, res) => {
       payload.applicationDate = todayISOInIST();
       payload.applicationDateDefaulted = true;
     }
+    const includeDetails = payload.includeDetails !== false;
     const pdfMode = String(payload.pdfMode || "internal");
     const fundsReq = calcFundsRequired(payload, config);
-    const fundsAvail = await calcFundsAvailable(payload, config.rules);
+    const fundsAvail = await calcFundsAvailable(payload, config.rules, includeDetails);
     const gapEligible = round2(fundsAvail.summary.totalEligibleGbp - fundsReq.fundsRequiredGbp);
     const gapAll = round2(fundsAvail.summary.totalAllGbp - fundsReq.fundsRequiredGbp);
 
+    auditEvent("report_calculated", req, {
+      studentAck: String(payload.studentAck || ""),
+      counselorEmail: String(payload.counselorEmail || ""),
+      currency: String(payload.quoteCurrency || "GBP"),
+      gapEligibleGbp: gapEligible
+    });
+
     res.json({
-      meta: { version: APP_VERSION, fxFetchedAt: lastFxFetchedAt },
+      meta: { version: APP_VERSION, fxFetchedAt: lastFxFetchedAt, correlationId: req.correlationId, detailsIncluded: includeDetails },
       fundsRequired: fundsReq,
       fundsAvailable: fundsAvail,
       gapGbp: gapEligible,
@@ -1174,6 +1383,13 @@ app.post("/api/pdf", async (req, res) => {
     const gapEligible = round2(fundsAvail.summary.totalEligibleGbp - fundsReq.fundsRequiredGbp);
     const gapAll = round2(fundsAvail.summary.totalAllGbp - fundsReq.fundsRequiredGbp);
     const ok = gapEligible >= 0;
+
+    auditEvent("pdf_generated", req, {
+      studentAck: String(payload.studentAck || ""),
+      counselorEmail: String(payload.counselorEmail || ""),
+      currency: String(payload.quoteCurrency || "GBP"),
+      ok
+    });
 
     // Quote currency for client-friendly display
     let quote = String(payload.quoteCurrency || "GBP").toUpperCase();
@@ -1605,6 +1821,7 @@ app.post("/api/pdf", async (req, res) => {
       { section: true, label: "Fees" },
       { label: "Tuition total", valueParts: dualInline(safeNum(payload.tuitionFeeTotalGbp)) },
       { label: "Tuition paid", valueParts: dualInline(safeNum(payload.tuitionFeePaidGbp)) },
+      { label: "Additional tuition (future)", valueParts: dualInline(safeNum(payload.tuitionFeeAdditionalGbp)) },
       { label: "Scholarship", valueParts: dualInline(safeNum(payload.scholarshipGbp)) },
       { label: "Buffer", valueParts: dualInline(safeNum(payload.bufferGbp)) },
       { section: true, label: "Visa" },
@@ -1706,9 +1923,12 @@ app.get("/healthz", (req, res) => res.json({ ok: true, ts: new Date().toISOStrin
 
 app.get("/health", (req, res) => res.json({ ok: true }));
 
-scheduleSync("students", STUDENTS_SOURCE_URL, STUDENTS_XLSX_PATH, STUDENTS_SYNC_MS, STUDENTS_SYNC_MIN_AGE_MINUTES);
+scheduleSync("students", STUDENTS_SOURCE_URL, STUDENTS_CSV_PATH, STUDENTS_SYNC_MS, STUDENTS_SYNC_MIN_AGE_MINUTES);
 scheduleSync("counselors", COUNSELORS_SOURCE_URL, COUNSELORS_CSV_PATH, COUNSELORS_SYNC_MS, COUNSELORS_SYNC_MIN_AGE_MINUTES);
 scheduleSync("country_currency", COUNTRY_CURRENCY_SOURCE_URL, COUNTRY_CURRENCY_PATH, COUNTRY_CURRENCY_SYNC_MS, COUNTRY_CURRENCY_SYNC_MIN_AGE_MINUTES);
+
+loadStudents();
+loadCounselors();
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));

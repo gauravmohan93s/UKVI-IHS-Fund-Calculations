@@ -1,0 +1,15 @@
+# dependencies
+node_modules/
+
+# build output
+public/*.min.js
+public/*.min.css
+
+# data + logs (keep local)
+data/
+backups/
+*.log
+
+# OS files
+Thumbs.db
+Desktop.ini

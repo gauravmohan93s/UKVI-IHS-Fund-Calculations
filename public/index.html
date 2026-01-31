@@ -248,6 +248,10 @@
         <input id="tuitionPaid" type="number" min="0" step="0.01" placeholder="e.g., 4000"/>
       </label>
 
+      <label>Additional tuition to be paid (future) - GBP
+        <input id="tuitionAdditional" type="number" min="0" step="0.01" value="0"/>
+      </label>
+
       <label>Scholarship / waiver - GBP
         <input id="scholarship" type="number" min="0" step="0.01" placeholder="e.g., 2000"/>
       </label>
@@ -367,11 +371,16 @@
       </div>
 
     <h3>Funds Required Breakdown</h3>
+    <label class="toggle" style="margin-bottom:8px">
+      <input type="checkbox" id="includeDetails"/>
+      <span>Include detailed funds breakdown (slower)</span>
+    </label>
     <table class="table dense funds-breakdown">
       <thead><tr><th>Component</th><th>GBP</th><th>Local</th></tr></thead>
       <tbody>
         <tr><td>Tuition total</td><td id="bTuitionTotalGbp">-</td><td id="bTuitionTotalFx">-</td></tr>
         <tr><td>Less: Tuition paid</td><td id="bTuitionPaidGbp">-</td><td id="bTuitionPaidFx">-</td></tr>
+        <tr><td>Less: Additional tuition (future)</td><td id="bTuitionAdditionalGbp">-</td><td id="bTuitionAdditionalFx">-</td></tr>
         <tr><td>Less: Scholarship / waiver</td><td id="bScholarshipGbp">-</td><td id="bScholarshipFx">-</td></tr>
         <tr><td>Tuition due</td><td id="bTuition">-</td><td id="bTuitionFx">-</td></tr>
         <tr><td>Maintenance (student)</td><td id="bStudent">-</td><td id="bStudentFx">-</td></tr>

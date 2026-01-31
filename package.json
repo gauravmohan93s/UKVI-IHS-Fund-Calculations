@@ -7,13 +7,19 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
+    "build": "node scripts/build.js",
+    "sync:students": "node scripts/sync-students.js",
+    "backup:data": "node scripts/backup-data.js",
     "smoke": "node scripts/smoke-test.js"
   },
   "dependencies": {
+    "compression": "^1.7.4",
     "csv-parse": "^5.6.0",
     "express": "^4.19.2",
     "morgan": "^1.10.0",
-    "pdfkit": "^0.15.0",
-    "xlsx": "^0.18.5"
+    "pdfkit": "^0.15.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.27.2"
   }
 }

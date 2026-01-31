@@ -38,12 +38,14 @@ const els = {
   counselorDesignation: $("counselorDesignation"),
   tuitionTotal: $("tuitionTotal"),
   tuitionPaid: $("tuitionPaid"),
+  tuitionAdditional: $("tuitionAdditional"),
   scholarship: $("scholarship"),
   dependants: $("dependants"),
   buffer: $("buffer"),
   rateHint: $("rateHint"),
   ratePanel: $("ratePanel"),
   dataStatus: $("dataStatus"),
+  includeDetails: $("includeDetails"),
 
   addRow: $("addRow"),
   clearRows: $("clearRows"),
@@ -107,6 +109,8 @@ const els = {
   bTuitionTotalFx: $("bTuitionTotalFx"),
   bTuitionPaidGbp: $("bTuitionPaidGbp"),
   bTuitionPaidFx: $("bTuitionPaidFx"),
+  bTuitionAdditionalGbp: $("bTuitionAdditionalGbp"),
+  bTuitionAdditionalFx: $("bTuitionAdditionalFx"),
   bScholarshipGbp: $("bScholarshipGbp"),
   bScholarshipFx: $("bScholarshipFx"),
   bTuitionFx: $("bTuitionFx"),
@@ -569,11 +573,16 @@ function initStudentSearch(){
 }
 
 let counselorSuggestMap = new Map();
+const counselorCache = new Map();
+let counselorSearchTimer = null;
 async function searchCounselors(query){
   const q = String(query || "").trim();
   if (q.length < 2) return [];
+  if (counselorCache.has(q)) return counselorCache.get(q);
   const out = await apiFetch(`/api/counselors?q=${encodeURIComponent(q)}`).then(r=>r.json());
-  return Array.isArray(out.items) ? out.items : [];
+  const items = Array.isArray(out.items) ? out.items : [];
+  counselorCache.set(q, items);
+  return items;
 }
 
 function renderCounselorSuggest(items){
@@ -614,8 +623,11 @@ function initCounselorSearch(){
     if (els.counselorEmail) els.counselorEmail.value = "";
     if (els.counselorRegion) els.counselorRegion.value = "";
     if (els.counselorDesignation) els.counselorDesignation.value = "";
-    const items = await searchCounselors(els.counselorInput.value);
-    renderCounselorSuggest(items);
+    if (counselorSearchTimer) clearTimeout(counselorSearchTimer);
+    counselorSearchTimer = setTimeout(async () => {
+      const items = await searchCounselors(els.counselorInput.value);
+      renderCounselorSuggest(items);
+    }, 150);
   });
   els.counselorInput.addEventListener("focus", async () => {
     const items = await searchCounselors(els.counselorInput.value);
@@ -907,9 +919,11 @@ function payload(){
 
     tuitionFeeTotalGbp: parseNumberInput(els.tuitionTotal.value),
     tuitionFeePaidGbp: parseNumberInput(els.tuitionPaid.value),
+    tuitionFeeAdditionalGbp: parseNumberInput(els.tuitionAdditional.value),
     scholarshipGbp: parseNumberInput(els.scholarship.value),
     dependantsCount: Math.floor(parseNumberInput(els.dependants.value)),
     bufferGbp: parseNumberInput(els.buffer.value),
+    includeDetails: Boolean(els.includeDetails && els.includeDetails.checked),
 
     fundsRows: getFundsRows(),
 
@@ -1516,11 +1530,14 @@ async function renderReport(out, body){
 
   const tuitionTotalGbp = out.fundsRequired.tuitionTotalGbp || 0;
   const tuitionPaidGbp = out.fundsRequired.tuitionPaidGbp || 0;
+  const tuitionAdditionalGbp = out.fundsRequired.tuitionAdditionalGbp || 0;
   const scholarshipGbp = out.fundsRequired.scholarshipGbp || 0;
   if (els.bTuitionTotalGbp) els.bTuitionTotalGbp.textContent = fmtMoney("GBP", tuitionTotalGbp);
   if (els.bTuitionTotalFx) els.bTuitionTotalFx.textContent = fmtMoney(quote, tuitionTotalGbp * gbpToQuote);
   if (els.bTuitionPaidGbp) els.bTuitionPaidGbp.textContent = fmtMoney("GBP", tuitionPaidGbp);
   if (els.bTuitionPaidFx) els.bTuitionPaidFx.textContent = fmtMoney(quote, tuitionPaidGbp * gbpToQuote);
+  if (els.bTuitionAdditionalGbp) els.bTuitionAdditionalGbp.textContent = fmtMoney("GBP", tuitionAdditionalGbp);
+  if (els.bTuitionAdditionalFx) els.bTuitionAdditionalFx.textContent = fmtMoney(quote, tuitionAdditionalGbp * gbpToQuote);
   if (els.bScholarshipGbp) els.bScholarshipGbp.textContent = fmtMoney("GBP", scholarshipGbp);
   if (els.bScholarshipFx) els.bScholarshipFx.textContent = fmtMoney(quote, scholarshipGbp * gbpToQuote);
   if (els.bTuition) els.bTuition.textContent = fmtMoney("GBP", out.fundsRequired.tuitionDueGbp);
@@ -1543,7 +1560,10 @@ async function renderReport(out, body){
   };
   if (!out.fundsAvailable.rows.length) {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td colspan="9">No funds added.</td>`;
+    const skipped = out.meta && out.meta.detailsIncluded === false;
+    tr.innerHTML = skipped
+      ? `<td colspan="9">Details skipped for faster calculation.</td>`
+      : `<td colspan="9">No funds added.</td>`;
     els.fundsAvailBreakBody.appendChild(tr);
   } else {
     out.fundsAvailable.rows.forEach(r=>{
@@ -1699,6 +1719,7 @@ function resetAll(){
   els.applicationDate.value = "";
   if (els.intendedTravelDate) els.intendedTravelDate.value = "";
   if (els.isPreSessional) els.isPreSessional.checked = false;
+  if (els.includeDetails) els.includeDetails.checked = false;
   if (els.visaServiceType) els.visaServiceType.value = "standard";
   if (els.visaDecisionDays) els.visaDecisionDays.value = defaultDecisionDays("standard");
   if (els.universityInput) els.universityInput.value = "";
@@ -1713,6 +1734,7 @@ function resetAll(){
   // Fees
   els.tuitionTotal.value = 0;
   els.tuitionPaid.value = 0;
+  if (els.tuitionAdditional) els.tuitionAdditional.value = 0;
   els.scholarship.value = 0;
   els.dependants.value = 0;
   setDefaultBuffer();
@@ -1721,7 +1743,7 @@ function resetAll(){
   els.fundsTbody.innerHTML = "";
 
   // Results placeholders
-  ["ihsGbp","ihsCalc","ihsFx","ihsQuickGbp","ihsQuickCalc","ihsVisaDuration","ihsChargeableBlocks","ihsIncreaseDate","ihsIncreaseApplyBy","ihsIncreaseTotal","ihsIncreaseGrantDate","ihsIncreaseMessage","ihsCurrentTotal","ihsCurrentApplyFrom","ihsCurrentApplyUntil","ihsCurrentGrantFrom","ihsCurrentGrantUntil","ihsApplyNotBefore","ihsMinGrantFrom","ihsMinGrantUntil","ihsMinVisaStartFrom","ihsMinVisaStartUntil","ihsMinApplyFrom","ihsMinApplyUntil","ihsMinTotal","ihsCurrentText","ihsHigherText","ihsLowerText","ihsNotBeforeText","fundsReqGbp","fundsReqFx","fundsAvailGbp","fundsAvailFx","gapGbp","gapFx","bTuition","bStudent","bDeps","bBuffer","bTotal","visaFeeGbp","ihsTotalGbp","visaServiceDecisionOut","grantDateOut","visaStartOut","visaEndOut","bTuitionTotalGbp","bTuitionTotalFx","bTuitionPaidGbp","bTuitionPaidFx","bScholarshipGbp","bScholarshipFx","bTuitionFx","bStudentFx","bDepsFx","bBufferFx","bTotalFx"]
+  ["ihsGbp","ihsCalc","ihsFx","ihsQuickGbp","ihsQuickCalc","ihsVisaDuration","ihsChargeableBlocks","ihsIncreaseDate","ihsIncreaseApplyBy","ihsIncreaseTotal","ihsIncreaseGrantDate","ihsIncreaseMessage","ihsCurrentTotal","ihsCurrentApplyFrom","ihsCurrentApplyUntil","ihsCurrentGrantFrom","ihsCurrentGrantUntil","ihsApplyNotBefore","ihsMinGrantFrom","ihsMinGrantUntil","ihsMinVisaStartFrom","ihsMinVisaStartUntil","ihsMinApplyFrom","ihsMinApplyUntil","ihsMinTotal","ihsCurrentText","ihsHigherText","ihsLowerText","ihsNotBeforeText","fundsReqGbp","fundsReqFx","fundsAvailGbp","fundsAvailFx","gapGbp","gapFx","bTuition","bStudent","bDeps","bBuffer","bTotal","visaFeeGbp","ihsTotalGbp","visaServiceDecisionOut","grantDateOut","visaStartOut","visaEndOut","bTuitionTotalGbp","bTuitionTotalFx","bTuitionPaidGbp","bTuitionPaidFx","bTuitionAdditionalGbp","bTuitionAdditionalFx","bScholarshipGbp","bScholarshipFx","bTuitionFx","bStudentFx","bDepsFx","bBufferFx","bTotalFx"]
     .forEach(id => $(id).textContent = "-");
   if (els.ihsCourseCategory) els.ihsCourseCategory.textContent = "-";
   if (els.ihsGrantDate) els.ihsGrantDate.value = "-";
